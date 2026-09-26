@@ -191,6 +191,7 @@ export class World {
     let hasShipyard = false, hasDocks = false;
     const idle = new Set<number>();
     const pop = p.pop;
+    const synthetic = e !== null && this.species(e).trait === 'synthetic';
 
     // Assign workers: best buildings first (tile-boosted), so shortages idle the weakest.
     const workerTiles: { i: number; v: number }[] = [];
@@ -201,7 +202,7 @@ export class World {
       housing += def.housing;
       if (def.id === 'garrison') defense += 8;
       if (def.scan) scan = Math.max(scan, def.scan);
-      if (def.needsWorker && !t.b.auto) {
+      if (def.needsWorker && !t.b.auto && !synthetic) {
         workersNeeded++;
         const m = tileMul(t.c);
         workerTiles.push({ i, v: def.yield.ind * m.ind + def.yield.res * m.res + def.yield.pro * m.pro + 0.5 });
@@ -215,7 +216,7 @@ export class World {
       const def = BUILDING[t.b.id];
       const m = tileMul(t.c);
       // Automated structures run without workers but less efficiently.
-      const a = t.b.auto && def.needsWorker ? AUTO_EFFICIENCY : 1;
+      const a = t.b.auto && def.needsWorker ? (synthetic ? 0.9 : AUTO_EFFICIENCY) : 1;
       y.ind += def.yield.ind * m.ind * a;
       y.res += def.yield.res * m.res * a;
       y.pro += def.yield.pro * m.pro * a;
@@ -240,9 +241,10 @@ export class World {
     let popMax = 0;
     if (e !== null) {
       const fav = this.isFavored(p, e) ? 1.25 : 1;
-      popMax = Math.floor(buildable * 0.3 * pt.popMul * fav) + housing + (this.species(e).trait === 'terraformers' ? 2 : 0);
+      const popMul = p.type === 'gasgiant' && this.species(e).trait === 'drifters' ? 0.9 : pt.popMul;
+      popMax = Math.floor(buildable * 0.3 * popMul * fav) + housing + (this.species(e).trait === 'terraformers' ? 2 : 0);
       popMax = Math.max(popMax, housing);
-      y.ind *= (1 + bonus.ind) * this.mult(e, 'ind');
+      y.ind *= (1 + bonus.ind) * this.mult(e, 'ind') * (this.buff(e, 'overclock') ? 2 : 1);
       y.res *= (1 + bonus.res) * this.mult(e, 'res');
       y.pro *= (1 + bonus.pro) * this.mult(e, 'pro');
       // AI difficulty handicap/bonus.
@@ -319,7 +321,7 @@ export class World {
       if (has || queued) return false;
     }
     if (id === 'docks' && !p.orbitals.some((o) => o?.id === 'shipyard')) return false;
-    if (!def.orbital && p.pop === 0 && def.needsWorker && !this.knows(e, 'selfmod')) return false;
+    if (!def.orbital && p.pop === 0 && def.needsWorker && !this.knows(e, 'selfmod') && this.species(e).trait !== 'synthetic') return false;
     return true;
   }
 
@@ -338,7 +340,14 @@ export class World {
   designCost(d: { hull: string; parts: string[]; owner: EmpireId }) {
     let c = HULL[d.hull].cost;
     for (const p of d.parts) if (p) c += PART[p].cost;
-    return Math.round(c * this.mult(d.owner, 'cost'));
+    const swarm = this.species(d.owner).trait === 'swarm' ? 0.7 : 1;
+    return Math.round(c * this.mult(d.owner, 'cost') * swarm);
+  }
+
+  /** Is a temporary ability effect active for this empire today? */
+  buff(e: EmpireId, id: string) {
+    const b = this.s.empires[e].buffs;
+    return !!b && (b[id] ?? -1) >= this.s.day;
   }
 
   shipStats(owner: EmpireId, hull: string, parts: string[]): ShipStats {
@@ -404,7 +413,8 @@ export class World {
   fleetSpeed(f: Fleet) {
     let sp = Infinity;
     for (const id of f.ships) sp = Math.min(sp, this.statsOf(this.s.ships[id]).speed);
-    return sp === Infinity ? 0 : sp;
+    if (sp === Infinity) return 0;
+    return this.buff(f.owner, 'currents') ? sp * 2 : sp;
   }
 
   fleetCanUseUnstable(f: Fleet) {

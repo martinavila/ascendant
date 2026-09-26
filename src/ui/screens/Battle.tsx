@@ -247,7 +247,7 @@ function draw(ctx: CanvasRenderingContext2D, w: World, rp: Replay, t: number, st
     if (!u) continue;
     const emp = w.s.empires[u.owner];
     const color = emp?.color ?? '#ccc';
-    const style = SPECIES_BY_ID[emp?.species ?? '']?.classicIndex ?? 0;
+    const style = SPECIES_BY_ID[emp?.species ?? '']?.style ?? 0;
     const size = 30 * hullScale(u.hull);
     const hl = o.hover === id || o.highlight === id;
     ctx.save();

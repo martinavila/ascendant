@@ -31,7 +31,7 @@ export function economyTick(w: World) {
       switch (p.project) {
         case 'grants': res += ind * 0.5; ind = 0; break;
         case 'festival': pro += ind * 0.5; ind = 0; break;
-        case 'convoy': e.logistics += ind * 0.6; ind = 0; break;
+        case 'convoy': e.logistics += ind * (w.species(e).trait === 'haulers' ? 0.85 : 0.6); ind = 0; break;
         case 'outreach': outreach[p.owner] += ind; ind = 0; break;
         case 'fortify': p.militia = Math.min(60, (p.militia ?? 0) + ind * 0.03); ind = 0; break;
         default: p.progress = Math.min(p.progress + ind, 200); ind = 0;
@@ -82,7 +82,7 @@ export function economyTick(w: World) {
       e.last.logisticsIn += give;
       completeItems(w, p);
     }
-    e.logistics = Math.min(e.logistics, 5000);
+    e.logistics = Math.min(e.logistics, w.species(e).trait === 'haulers' ? 8000 : 5000);
   }
 
   // Outreach improves relations monthly.
@@ -174,7 +174,7 @@ function finishItem(w: World, p: Planet, item: BuildItem) {
   switch (item.kind) {
     case 'building': {
       const def = BUILDING[item.id];
-      const auto = def.needsWorker && w.knows(owner, 'selfmod') ? true : undefined;
+      const auto = def.needsWorker && (w.knows(owner, 'selfmod') || w.species(owner).trait === 'synthetic') ? true : undefined;
       const inst = auto ? { id: item.id, auto } : { id: item.id };
       if (item.orbital) p.orbitals[item.tile] = inst;
       else p.tiles[item.tile].b = inst;

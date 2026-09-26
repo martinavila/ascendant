@@ -31,7 +31,7 @@ const DEFAULT_PAUSE: Record<EventKind, boolean> = {
 };
 
 function loadSettings(): Settings {
-  const base: Settings = { pauseOn: { ...DEFAULT_PAUSE }, classicArt: true, uiScale: 1, showLabels: true, autosaveEvery: 30, tutorialTips: true };
+  const base: Settings = { pauseOn: { ...DEFAULT_PAUSE }, classicArt: false, uiScale: 1, showLabels: true, autosaveEvery: 30, tutorialTips: true };
   try {
     const raw = localStorage.getItem('ascendant-settings');
     if (raw) {

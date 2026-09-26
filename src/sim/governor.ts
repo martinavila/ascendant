@@ -50,7 +50,7 @@ export function threatMap(w: World, e: EmpireId): Float32Array {
 function workerStats(w: World, p: Planet) {
   const ec = w.econ(p);
   const queuedWorkers = p.queue.filter((q) => q.kind === 'building' && BUILDING[q.id].needsWorker && !q.replace).length;
-  const selfmod = w.knows(p.owner!, 'selfmod');
+  const selfmod = w.knows(p.owner!, 'selfmod') || w.species(p.owner!).trait === 'synthetic';
   return {
     ec,
     free: p.pop - ec.workersNeeded - queuedWorkers,

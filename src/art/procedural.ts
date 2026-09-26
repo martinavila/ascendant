@@ -29,7 +29,7 @@ function noise3(x: number, y: number, z: number, seed: number) {
   );
 }
 
-function fbm(x: number, y: number, z: number, seed: number, oct = 5) {
+export function fbm(x: number, y: number, z: number, seed: number, oct = 5) {
   let a = 0.5, f = 1, s = 0, n = 0;
   for (let i = 0; i < oct; i++) {
     s += a * noise3(x * f, y * f, z * f, seed + i * 17);

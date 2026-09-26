@@ -368,6 +368,8 @@ function setupHomeworld(w: World, e: Empire, starId: number, rng: Rng) {
   place('lab', ['blue', 'white']);
   place('lab', ['blue', 'white']);
   home.orbitals[0] = { id: 'shipyard' };
+  if (sp.trait === 'synthetic') for (const t of home.tiles) if (t.b && t.b.id !== 'colonybase') t.b.auto = true;
+  if (sp.trait === 'ancient') e.research.known.push(...TECHS.filter((t) => t.tier === 1).map((t) => t.id));
 
   // A second decent planet nearby helps early expansion feel good.
   const neighbours = w.hops(starId, 2);

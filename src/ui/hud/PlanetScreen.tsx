@@ -21,7 +21,7 @@ const FOCUS_TIP: Record<GovernorFocus, string> = {
 const SIZE_NAME = ['Tiny', 'Small', 'Medium', 'Large', 'Huge'];
 const COLOR_TIP: Record<string, string> = {
   white: 'Ordinary ground.',
-  black: 'Dead ground: nothing can be built here (Terraforming can reclaim it).',
+  black: 'Dead ground: nothing can be built here (Worldshaping can reclaim it).',
   red: 'Industry tile: structures that produce industry produce double here.',
   green: 'Prosperity tile: structures that produce prosperity produce double here.',
   blue: 'Research tile: structures that produce research produce double here.',
@@ -209,7 +209,7 @@ export function PlanetScreen({ planetId, onClose }: { planetId: number; onClose:
                     )}
                   </div>
                 )}
-                {!mine && owner && w.atWar(human.id, owner.id) && <div class="card small">Invasion defense: <b>{invasionDefense(w, p)}</b>. Destroy its orbital defenses, then land troops with Invasion Modules.</div>}
+                {!mine && owner && w.atWar(human.id, owner.id) && <div class="card small">Invasion defense: <b>{invasionDefense(w, p)}</b>. Destroy its orbital defenses, then land troops with Assault Pods.</div>}
                 {!owner && <div class="card small dim">Unclaimed. {p.type === 'gasgiant' ? 'Gas giants can only hold outposts (orbital structures).' : 'Send a colony ship to settle it, or an outpost kit to claim its orbit.'}{p.ruins && !p.ruins.dug ? ' Ancient ruins lie here.' : ''}</div>}
               </>
             )}

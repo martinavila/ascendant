@@ -193,7 +193,11 @@ export function foundColony(w: World, p: Planet, owner: EmpireId, populated: boo
   p.progress = 0;
   p.governor = { on: e.prefs.governNewColonies || !e.human, focus: 'balanced', autoUpgrade: true };
   if (populated) {
-    p.pop = Math.max(p.pop, 1);
+    p.pop = Math.max(p.pop, w.species(owner).trait === 'sporeborn' ? 3 : 1);
+    // Aeolin cloud cities: open up most of a gas giant's "surface".
+    if (p.type === 'gasgiant' && w.species(owner).trait === 'drifters' && !p.tiles.some((t) => t.c !== 'black')) {
+      p.tiles.forEach((t, i) => { if ((i * 7 + p.id) % 10 < 6) t.c = i % 5 === 0 ? 'green' : 'white'; });
+    }
     if (!p.tiles.some((t) => t.b?.id === 'colonybase')) {
       let idx = p.tiles.findIndex((t) => !t.b && t.c === 'white');
       if (idx < 0) idx = p.tiles.findIndex((t) => !t.b && t.c !== 'black');

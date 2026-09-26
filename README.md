@@ -12,7 +12,11 @@ npm run build        # static build in dist/ (deploy anywhere)
 
 Dev shortcut: open `http://localhost:5173/?quick` (or `?quick=SEED&stars=600`) to skip the menus.
 
-## Classic art (optional, local only)
+## Original content
+
+Everything the game ships with is original: 21 species with their own traits, abilities, lore and procedurally painted portraits (`src/art/portraits.ts`), plus new names for techs, structures, parts and planet types. The design follows Ascendancy's structure (game mechanics aren't copyrightable), but none of its names, text or art ship with the game.
+
+## Classic art (optional, local only, off by default)
 
 The game ships with resolution-independent procedural art and needs nothing else. If you own the original, you can use its art, upscaled:
 

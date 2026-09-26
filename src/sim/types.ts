@@ -109,7 +109,8 @@ export interface PlanetTypeDef {
 
 export type SpeciesTrait =
   | 'telepathic' | 'lithovore' | 'laneFolder' | 'crystalline' | 'prolific' | 'scholars' | 'raiders'
-  | 'luminous' | 'terraformers' | 'diplomats' | 'shadowed' | 'gardeners';
+  | 'luminous' | 'terraformers' | 'diplomats' | 'shadowed' | 'gardeners'
+  | 'seers' | 'swarm' | 'synthetic' | 'aquatic' | 'drifters' | 'ancient' | 'sporeborn' | 'armored' | 'haulers';
 
 export interface SpeciesDef {
   id: string;
@@ -125,7 +126,8 @@ export interface SpeciesDef {
   color: string;
   personality: AiPersonality;
   lore: string;
-  classicIndex: number;
+  /** Visual style seed for procedural portraits and ship silhouettes. */
+  style: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -319,6 +321,8 @@ export interface Empire {
   prefs: { autoUpgradeAll: boolean; governNewColonies: boolean; autoResearch: boolean };
   /** Industry shipped by Supply Convoy projects, spent to speed up needy planets. */
   logistics: number;
+  /** Temporary effects from abilities: id -> last day active. */
+  buffs?: Record<string, number>;
   /** Totals from the last processed day (for UI). */
   last: { ind: number; res: number; pro: number; pop: number; logisticsIn: number };
 }

@@ -29,8 +29,8 @@ export function queueBuilding(w: World, p: Planet, id: string, tile: number, orb
 
 export function queueItem(w: World, p: Planet, item: BuildItem, front = false): Result {
   if (item.kind === 'ship' && !w.econ(p).hasShipyard) return fail('This planet has no shipyard.');
-  if (item.kind === 'automate' && !w.knows(p.owner!, 'automation')) return fail('Requires Automation.');
-  if (item.kind === 'terraform' && !w.knows(p.owner!, 'terraforming')) return fail('Requires Terraforming.');
+  if (item.kind === 'automate' && !w.knows(p.owner!, 'automation')) return fail('Requires Autonomous Systems.');
+  if (item.kind === 'terraform' && !w.knows(p.owner!, 'terraforming')) return fail('Requires Worldshaping.');
   if (item.kind === 'ascension' && !w.knows(p.owner!, 'transcendence')) return fail('Requires Transcendence Theory.');
   front ? p.queue.unshift(item) : p.queue.push(item);
   w.touch();
@@ -179,7 +179,7 @@ export function orderColonize(w: World, f: Fleet, planetId: number, outpost = fa
   });
   if (!has) return fail(outpost ? 'Needs an Outpost Kit or Colony Module.' : 'Needs a Colony Module.');
   if (p.owner !== null && !(p.owner === f.owner && p.pop === 0)) return fail('Already claimed.');
-  if (!outpost && p.type === 'gasgiant') return fail('Gas giants can only hold outposts.');
+  if (!outpost && p.type === 'gasgiant' && w.species(f.owner).trait !== 'drifters') return fail('Gas giants can only hold outposts.');
   f.order = outpost ? { kind: 'outpost', planet: planetId } : { kind: 'colonize', planet: planetId };
   if (p.star !== f.star || f.transit) return moveFleet(w, f, p.star);
   w.touch();
@@ -188,7 +188,7 @@ export function orderColonize(w: World, f: Fleet, planetId: number, outpost = fa
 
 export function orderInvade(w: World, f: Fleet, planetId: number): Result {
   const p = w.s.planets[planetId];
-  if (!f.ships.some((id) => w.statsOf(w.s.ships[id]).invasion > 0)) return fail('Needs Invasion Modules.');
+  if (!f.ships.some((id) => w.statsOf(w.s.ships[id]).invasion > 0)) return fail('Needs Assault Pods.');
   if (p.owner === null || p.owner === f.owner) return fail('Choose an enemy planet.');
   if (!w.atWar(f.owner, p.owner)) return fail('You are not at war with them.');
   f.order = { kind: 'invade', planet: planetId };

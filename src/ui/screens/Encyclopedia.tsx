@@ -135,7 +135,7 @@ const GUIDES: Guide[] = [
         <p>Weapons differ in damage per shot, shots per round and range. Shields absorb up to their strength every round and fully recharge — so many small hits (<L to="part:pulser" />) shred light shields but bounce off heavy ones.</p>
         <h4>Refits</h4>
         <p>Ships remember their own parts. At a planet with a shipyard you can refit <b>one component at a time</b> for roughly the cost of the new part — no need to scrap an old fleet, as in the original. You can also refit a whole fleet to a newer design in one click.</p>
-        <Tip>Orbital Docks make ships 25% cheaper at that planet. Mark outdated designs obsolete to keep your build menus clean.</Tip>
+        <Tip>Drydock Rings make ships 25% cheaper at that planet. Mark outdated designs obsolete to keep your build menus clean.</Tip>
       </>
     ),
   },
@@ -160,7 +160,7 @@ const GUIDES: Guide[] = [
           <li><b>Beat the defense.</b> Defense = 3 per population + militia (from the <L to="project:fortify" /> project) + 8 per <L to="building:garrison" />. Bring a comfortable margin; there is some luck in every landing.</li>
         </ol>
         <p>Conquered planets keep their structures, and governors will rearrange anything badly placed.</p>
-        <Tip>Tractor beams stop enemies from escaping a battle; sensor jammers make your ships 25% harder to hit.</Tip>
+        <Tip>Grapple fields stop enemies from escaping a battle; sensor jammers make your ships 25% harder to hit.</Tip>
       </>
     ),
   },
@@ -617,7 +617,7 @@ function PlanetArticle({ t }: { t: PlanetTypeDef }) {
       {fans.length ? <div class="ency-chips">{fans.map((s) => <CardLink key={s.id} to={`species:${s.id}`} />)}</div> : <p class="dim">No species calls this home.</p>}
       {(next || from.length > 0) && (
         <>
-          <h4>Terraforming</h4>
+          <h4>Worldshaping</h4>
           {next && <p>Can be reshaped into <L to={`planet:${next}`} />.</p>}
           {from.length > 0 && <p>Reached by reshaping {from.map((f, i) => <>{i > 0 && (i === from.length - 1 ? ' or ' : ', ')}<L to={`planet:${f}`} /></>)}.</p>}
           <p class="dim small">The <L to="species:cthari" /> can reshape worlds with their special ability.</p>

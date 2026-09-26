@@ -511,7 +511,7 @@ function PlanetRow({ w, h, r, checked, onCheck }: { w: World; h: Empire; r: Row;
         <div class="flags">
           {ec.idle.size > 0 && <span class="chip bad" data-tip={`${plural(ec.idle.size, 'structure')} without workers — they produce nothing`}>{ec.idle.size} idle</span>}
           {!!p.besieged && <span class="chip bad" data-tip="Orbital defenses down; enemy fleets are blockading this world">Siege</span>}
-          {ec.hasShipyard && <span class="chip" data-tip={ec.hasDocks ? 'Orbital Docks: ships cost 25% less' : 'Shipyard: can build ships'}><Icon.ship size={11} />{ec.hasDocks ? 'Docks' : 'Yard'}</span>}
+          {ec.hasShipyard && <span class="chip" data-tip={ec.hasDocks ? 'Drydock Ring: ships cost 25% less' : 'Shipyard: can build ships'}><Icon.ship size={11} />{ec.hasDocks ? 'Docks' : 'Yard'}</span>}
           {ec.defense > 0 && <span class="chip" data-tip={`Defense rating ${Math.round(ec.defense)}`}><Icon.shield size={11} /></span>}
         </div>
       </td>

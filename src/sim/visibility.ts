@@ -42,11 +42,12 @@ export function visibilityTick(w: World) {
     for (const id of starsWithin(w, st.x, st.y, range)) vis[e][id] = 1;
     vis[e][star] = 1;
   };
-  for (const p of s.planets) if (p.owner !== null) mark(p.owner, p.star, w.econ(p).scan);
+  const seer = s.empires.map((e) => (w.species(e).trait === 'seers' ? 2 : 1));
+  for (const p of s.planets) if (p.owner !== null) mark(p.owner, p.star, w.econ(p).scan * seer[p.owner]);
   for (const f of Object.values(s.fleets)) {
     let scan = 90;
     for (const id of f.ships) scan = Math.max(scan, w.statsOf(s.ships[id]).scan);
-    mark(f.owner, f.star, scan);
+    mark(f.owner, f.star, scan * seer[f.owner]);
     if (f.route.length) vis[f.owner][f.route[0]] = 1;
   }
   // Allies share sensor data.

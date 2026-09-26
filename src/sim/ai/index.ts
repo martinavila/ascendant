@@ -73,7 +73,7 @@ function colonyTargets(w: World, e: Empire, kind: 'colonize' | 'outpost') {
   const out: { p: Planet; v: number }[] = [];
   for (const p of s.planets) {
     if (p.owner !== null || claimed.has(p.id) || e.explored[p.star] < 2) continue;
-    if (kind === 'colonize' && p.type === 'gasgiant') continue;
+    if (kind === 'colonize' && p.type === 'gasgiant' && w.species(e).trait !== 'drifters') continue;
     // Avoid systems held by others unless we are much stronger.
     const others = [...w.ownerAtStar(p.star)].filter((o) => o !== e.id);
     if (others.some((o) => !w.atWar(e.id, o)) && kind === 'outpost') continue;
@@ -414,7 +414,12 @@ function tryAbility(w: World, e: Empire) {
   const mine = w.planetsOf[e.id].map((id) => s.planets[id]);
   let t: AbilityTarget | null = null;
   switch (sp.ability.id) {
-    case 'census': case 'brood': case 'frenzy': t = {}; break;
+    case 'census': case 'brood': case 'frenzy': case 'recall': case 'hatch': case 'convergence': t = {}; break;
+    case 'overclock': if (mine.some((x) => x.queue.length)) t = {}; break;
+    case 'currents': case 'shellwall': if (s.empires.some((o) => o.alive && w.atWar(e.id, o.id))) t = {}; break;
+    case 'omen': { const st = s.stars.find((x) => e.explored[x.id] === 1); if (st) t = { star: st.id }; break; }
+    case 'cloudseed': { const p = s.planets.find((x) => x.owner === null && x.type === 'gasgiant' && e.explored[x.star] === 2); if (p) t = { planet: p.id }; break; }
+    case 'infest': { const p = s.planets.filter((x) => x.owner !== null && w.atWar(e.id, x.owner) && w.visible[e.id]?.[x.star] && x.pop > 3).sort((a, b) => b.pop - a.pop)[0]; if (p) t = { planet: p.id }; break; }
     case 'epiphany': if (e.research.current && TECH[e.research.current].cost > 300) t = {}; break;
     case 'feast': { const p = mine.sort((a, b) => b.tiles.filter((x) => x.c === 'black').length - a.tiles.filter((x) => x.c === 'black').length)[0]; if (p) t = { planet: p.id }; break; }
     case 'bloom': { const p = mine.filter((x) => x.queue.length).sort((a, b) => w.itemCost(b, b.queue[0]) - w.itemCost(a, a.queue[0]))[0]; if (p && w.itemCost(p, p.queue[0]) > 90) t = { planet: p.id }; break; }

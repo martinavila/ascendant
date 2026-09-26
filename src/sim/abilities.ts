@@ -1,8 +1,9 @@
 import { BUILDING, TERRAFORM_NEXT } from './content';
 import type { EmpireId } from './types';
 import type { World } from './world';
-import { addMod } from './economy';
-import { foundColony, removeShip } from './fleets';
+import { addMod, availableTechs, grantTech } from './economy';
+import { foundColony, removeShip, spawnShip } from './fleets';
+import { starsWithin } from './visibility';
 
 export type AbilityTarget = { planet?: number; star?: number; fleet?: number; empire?: EmpireId };
 
@@ -46,6 +47,24 @@ export function abilityCheck(w: World, e: EmpireId, t: AbilityTarget): string | 
       return null;
     case 'epiphany':
       if (!s.empires[e].research.current) return 'Choose a research project first.';
+      return null;
+    case 'omen':
+      if (t.star === undefined || s.empires[e].explored[t.star] < 1) return 'Choose a charted star.';
+      return null;
+    case 'cloudseed':
+      if (!p || p.owner !== null || p.type !== 'gasgiant') return 'Choose an unclaimed gas giant.';
+      if (s.empires[e].explored[p.star] < 2) return 'You must have surveyed that system.';
+      return null;
+    case 'infest':
+      if (!p || p.owner === null || p.owner === e || w.allied(e, p.owner)) return 'Choose a rival planet.';
+      if (!w.visible[e]?.[p.star]) return 'You must be able to see that planet.';
+      if (p.pop <= 1) return 'Too few people there to infect.';
+      return null;
+    case 'recall':
+      if (!availableTechs(w, e).length) return 'Nothing left to remember.';
+      return null;
+    case 'hatch':
+      if (s.empires[e].capital === null) return 'You need a capital.';
       return null;
     default:
       return null;
@@ -138,6 +157,52 @@ export function useAbility(w: World, e: EmpireId, t: AbilityTarget): string | nu
     case 'seed':
       foundColony(w, p!, e, true);
       msg = `Seed pods take root on ${p!.name}.`;
+      break;
+    case 'omen': {
+      const c = s.stars[t.star!];
+      let n = 0;
+      for (const id of starsWithin(w, c.x, c.y, 700)) { if (emp.explored[id] < 2) n++; emp.explored[id] = 2; }
+      msg = `An omen reveals ${n} new system${n === 1 ? '' : 's'} around ${c.name}.`;
+      break;
+    }
+    case 'hatch': {
+      const d = Object.values(s.designs).filter((x) => x.owner === e && x.role === 'warship' && !x.obsolete).sort((a, b) => b.created - a.created)[0];
+      const star = s.planets[emp.capital!].star;
+      if (d) for (let i = 0; i < 3; i++) spawnShip(w, d, star);
+      msg = d ? `Three ${d.name}s hatch above your capital.` : 'The hatchlings found no design to grow into.';
+      break;
+    }
+    case 'overclock':
+      emp.buffs = { ...emp.buffs, overclock: s.day + 20 };
+      msg = 'Every foundry runs at double speed for 20 days.';
+      break;
+    case 'currents':
+      emp.buffs = { ...emp.buffs, currents: s.day + 30 };
+      msg = 'Deep currents speed every fleet for 30 days.';
+      break;
+    case 'cloudseed':
+      foundColony(w, p!, e, true);
+      msg = `A storm-city forms in the clouds of ${p!.name}.`;
+      break;
+    case 'recall': {
+      const tech = availableTechs(w, e).sort((a, b) => a.cost - b.cost)[0];
+      grantTech(w, emp, tech.id);
+      msg = `The elders recall the art of ${tech.name}.`;
+      break;
+    }
+    case 'infest':
+      p!.pop = Math.max(1, p!.pop - 3);
+      addMod(s.empires[p!.owner!], e, 'Spore attack', -15, { decay: 3 });
+      if (s.empires[p!.owner!].human) w.event(p!.owner!, 'lost', `A spore blight strikes ${p!.name}: population falls.`, { planet: p!.id });
+      msg = `Spores settle over ${p!.name}.`;
+      break;
+    case 'shellwall':
+      for (const id of w.planetsOf[e]) s.planets[id].militia = (s.planets[id].militia ?? 0) + 25;
+      msg = 'Every world raises a shell wall: +25 militia.';
+      break;
+    case 'convergence':
+      emp.logistics += 4 * emp.last.ind;
+      msg = `Convergence: ${Math.round(4 * emp.last.ind)} industry flows into the logistics pool.`;
       break;
   }
   emp.abilityReadyDay = s.day + sp.ability.cooldown;

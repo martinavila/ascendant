@@ -1,7 +1,8 @@
 import type { JSX } from 'preact';
 import { BUILDING, PART } from '../sim/content';
-import { classicBuilding, classicPart, classicFace, classicPortrait, classicPlanet, classicShip } from '../art/classic';
-import { planetUrl, shipUrl, sigilUrl } from '../art/procedural';
+import { classicBuilding, classicPart, classicPlanet } from '../art/classic';
+import { portraitUrl } from '../art/portraits';
+import { planetUrl, shipUrl } from '../art/procedural';
 import { store } from './store';
 import { SPECIES_BY_ID } from '../sim/content';
 import type { Planet } from '../sim/types';
@@ -109,10 +110,10 @@ export function PlanetOrb({ planet, size = 48 }: { planet: Pick<Planet, 'type' |
   return <img class="planet-orb" src={planetImage(planet, size > 90 ? 256 : 96)} width={size} height={size} alt="" draggable={false} style={{ objectFit: 'contain' }} />;
 }
 
+/** Original, procedurally painted portrait for every species (3:2). */
 export function portrait(speciesId: string, color: string, big = false): string {
   const sp = SPECIES_BY_ID[speciesId];
-  const c = store.settings.classicArt ? (big ? classicPortrait(sp.classicIndex) : classicFace(sp.classicIndex) ?? classicPortrait(sp.classicIndex)) : null;
-  return c ?? sigilUrl(speciesId, color, big ? 256 : 128);
+  return portraitUrl(speciesId, sp?.color ?? color, big ? 480 : 240);
 }
 
 export function Portrait({ species, color, size = 40, big = false }: { species: string; color: string; size?: number; big?: boolean }) {
@@ -121,8 +122,7 @@ export function Portrait({ species, color, size = 40, big = false }: { species: 
 
 export function ShipImage({ species, hull, color, size = 40 }: { species: string; hull: string; color: string; size?: number }) {
   const sp = SPECIES_BY_ID[species];
-  const c = store.settings.classicArt ? classicShip(sp.classicIndex, hull) : null;
-  return <img src={c ?? shipUrl(hull, color, sp.classicIndex, 64)} width={size} height={size} style={{ objectFit: 'contain' }} alt="" draggable={false} />;
+  return <img src={shipUrl(hull, color, sp?.style ?? 0, 64)} width={size} height={size} style={{ objectFit: 'contain' }} alt="" draggable={false} />;
 }
 
 export function EmpireDot({ color, size = 10 }: { color: string; size?: number }) {

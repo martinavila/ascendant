@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 import { store, useStore } from '../store';
 import { Modal, Bar, act, fmt } from '../common';
 import { Icon, PartIcon, ShipImage } from '../icons';
-import { classicDesign } from '../../art/classic';
 import { HULLS, HULL, PART, PARTS, TECH, SPECIES_BY_ID } from '../../sim/content';
 import { saveDesign, suggestDesign, inferRole, setObsolete, refitFleetTo } from '../../sim/commands';
 import { bestParts, type DesignRole } from '../../sim/ai/designer';
@@ -70,7 +69,7 @@ function keyStat(p: PartDef, luminous: boolean): { main: string; sub?: string } 
 }
 
 function specialLabel(k: string) {
-  return ({ colony: 'Colonize', outpost: 'Outpost', invasion: 'Troops', armor: 'Armor', repair: 'Repair', cloak: 'Cloak', laneDrive: 'Red lanes', tractor: 'Tractor', jammer: 'Jammer' } as Record<string, string>)[k] ?? k;
+  return ({ colony: 'Colonize', outpost: 'Outpost', invasion: 'Troops', armor: 'Armor', repair: 'Repair', cloak: 'Cloak', laneDrive: 'Red lanes', tractor: 'Grapple', jammer: 'Jammer' } as Record<string, string>)[k] ?? k;
 }
 
 function partTip(p: PartDef, luminous: boolean, isNew: boolean) {
@@ -357,7 +356,7 @@ function Designer({ w, human, arg }: { w: World; human: Empire; arg: DesignerArg
   const knownHulls = HULLS.filter((h) => w.knows(e, h.tech));
   const selPart = sel != null ? draft.parts[sel] : '';
 
-  const classicImg = store.settings.classicArt ? classicDesign(sp.classicIndex, draft.hull) : null;
+  const classicImg: string | null = null;
 
   return (
     <Modal
@@ -667,7 +666,7 @@ function StatsPanel(props: {
   if (s.repair) specials.push({ k: 'rep', label: 'Self-repair', tip: 'Repairs 15% hull per day and between combat rounds.' });
   if (s.cloak) specials.push({ k: 'clk', label: 'Cloaked', tip: 'Invisible unless enemy deep scanners are nearby (every ship in the fleet needs one).' });
   if (s.laneDrive) specials.push({ k: 'lane', label: 'Red lanes', tip: 'Can cross unstable lanes.' });
-  if (s.tractor) specials.push({ k: 'trc', label: 'Tractor', tip: 'Stops enemies retreating from battle.' });
+  if (s.tractor) specials.push({ k: 'trc', label: 'Grapple', tip: 'Stops enemies retreating from battle.' });
   if (s.jammer) specials.push({ k: 'jam', label: 'Jammer', tip: 'Enemies hit this ship 25% less often.' });
 
   return (
