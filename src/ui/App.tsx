@@ -7,6 +7,7 @@ import { Outliner } from './hud/Outliner';
 import { StarPanel } from './hud/StarPanel';
 import { FleetPanel } from './hud/FleetPanel';
 import { PlanetScreen } from './hud/PlanetScreen';
+import { FirstSteps } from './hud/FirstSteps';
 import { TooltipLayer } from './common';
 import { Icon } from './icons';
 import { ResearchScreen } from './screens/Research';
@@ -90,6 +91,7 @@ function Game() {
       <MapView />
       <TopBar onMenu={() => setMenu(true)} />
       <Outliner mobileOpen={mobileOutliner} />
+      <FirstSteps />
       <button class="btn icon" style={{ position: 'absolute', left: 8, bottom: 8, zIndex: 16, display: window.innerWidth < 860 ? 'flex' : 'none' }} onClick={() => setMobileOutliner((x) => !x)}><Icon.menu /></button>
       {showRight && (
         <div class="panel right">

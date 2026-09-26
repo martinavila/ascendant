@@ -10,6 +10,8 @@ npm run sim -- --stars 300 --empires 8 --days 1500   # headless AI-vs-AI game
 npm run build        # static build in dist/ (deploy anywhere)
 ```
 
+Dev shortcut: open `http://localhost:5173/?quick` (or `?quick=SEED&stars=600`) to skip the menus.
+
 ## Classic art (optional, local only)
 
 The game ships with resolution-independent procedural art and needs nothing else. If you own the original, you can use its art, upscaled:
@@ -19,7 +21,7 @@ The game ships with resolution-independent procedural art and needs nothing else
 npm run import-classic                # or: python3 tools/import_classic.py --game /path --scale 4
 ```
 
-This decodes the original `.COB` archives and `.SHP` sprites (the format is documented in `tools/shp.py`), removes the 8-bit dithering, upscales with Lanczos and sharpening via `ffmpeg` (or Real-ESRGAN if `realesrgan-ncnn-vulkan` is on your PATH), and writes PNGs to `public/classic/`. The game detects them on startup and uses the original planets, suns, species portraits, structures, ship parts and ships; toggle it under Settings. That folder is git-ignored: the original art is The Logic Factory's copyright, so keep it on your machine.
+This decodes the original `.COB` archives and `.SHP` sprites (the format is documented in `tools/shp.py`), removes the 8-bit dithering, upscales with Lanczos and sharpening via `ffmpeg` (or Real-ESRGAN if `realesrgan-ncnn-vulkan` is on your PATH), and writes PNGs to `public/classic/`. The game detects them on startup and uses the original planets, suns, species portraits, structures, ship parts and ships; toggle it under Settings. That folder is git-ignored, and `npm run build` strips it from `dist/`. The original art is The Logic Factory's copyright, so keep it on your machine (`INCLUDE_CLASSIC=1 npm run build` if you really want a private local build with it).
 
 ## What's fixed from the original
 

@@ -51,7 +51,7 @@ export function TopBar({ onMenu }: { onMenu: () => void }) {
   return (
     <div class="panel topbar">
       <button class="btn ghost icon" onClick={onMenu} data-tip="Menu: save, load, settings"><Icon.menu /></button>
-      <div class="brand" style={{ fontSize: 13 }}>ASCEND<span>ANT</span></div>
+      <div class="brand hide-lg" style={{ fontSize: 13 }}>ASCEND<span>ANT</span></div>
       <div class="row" style={{ gap: 6 }} data-tip={`${e.name}\n${sp.name} — ${sp.traitDesc}`}>
         <Portrait species={e.species} color={e.color} size={30} />
       </div>
@@ -68,24 +68,24 @@ export function TopBar({ onMenu }: { onMenu: () => void }) {
           </button>
         ))}
         <button class={'btn sm ' + (st.untilEvent && st.speed ? 'active' : '')} onClick={() => st.play(60, true)} data-tip="Run until something needs your attention (4). Configure which events stop time in Settings.">
-          <Icon.skip size={14} /> Until event
+          <Icon.skip size={14} /><span class="hide-lg">Until event</span>
         </button>
       </div>
       <div class="row" style={{ gap: 14, marginLeft: 6 }}>
         <span class="stat" data-tip={`Industry per day across all planets.\nLogistics pool: ${fmt(e.logistics)} (Supply Convoys feed planets that are building)`}>{Icon.ind({ size: 18 })}<b>{fmt(e.last.ind)}</b></span>
         <span class="stat" data-tip="Research per day (pooled empire-wide)">{Icon.res({ size: 18 })}<b>{fmt(e.last.res)}</b></span>
-        <span class="stat" data-tip="Prosperity per day (grows population on each planet)">{Icon.pro({ size: 18 })}<b>{fmt(e.last.pro)}</b></span>
+        <span class="stat hide-md" data-tip="Prosperity per day (grows population on each planet)">{Icon.pro({ size: 18 })}<b>{fmt(e.last.pro)}</b></span>
         <span class="stat" data-tip={`Population ${e.last.pop} on ${planets} planets`}>{Icon.pop({ size: 18 })}<b>{e.last.pop}</b><span class="dim small">/{planets}</span></span>
-        <span class="stat" data-tip={`${ships} ships`}>{Icon.ship({ size: 18 })}<b>{ships}</b></span>
+        <span class="stat hide-md" data-tip={`${ships} ships`}>{Icon.ship({ size: 18 })}<b>{ships}</b></span>
       </div>
-      <button class="btn ghost" style={{ minWidth: 190, maxWidth: 260, flexDirection: 'column', alignItems: 'stretch', gap: 3, padding: '4px 10px' }} onClick={() => st.open('research')} data-tip="Research (R)">
+      <button class={'btn ghost ' + (r.current ? '' : 'pulse')} style={{ minWidth: 150, maxWidth: 260, flex: '0 1 240px', flexDirection: 'column', alignItems: 'stretch', gap: 3, padding: '4px 10px' }} onClick={() => st.open('research')} data-tip="Research (R)">
         <span class="row small" style={{ gap: 6 }}>{Icon.res({ size: 14 })}<span class="ellipsis grow" style={{ textAlign: 'left' }}>{r.current ? TECH[r.current].name : <span class="warn">Choose research!</span>}</span>{r.current && <span class="dim mono">{eta}d</span>}</span>
         <Bar value={r.progress} max={cost || 1} color="var(--res)" />
       </button>
       <div class="spacer" />
       <div style={{ position: 'relative' }}>
         <button class={'btn sm ' + (ready ? 'primary' : '')} disabled={!ready} onClick={useAb} data-tip={`${sp.ability.name}: ${sp.ability.desc}\nCooldown ${sp.ability.cooldown} days.${ready ? '' : `\nReady on day ${e.abilityReadyDay}.`}`}>
-          <Icon.bolt size={14} /> {sp.ability.name}{!ready && <span class="mono dim"> {e.abilityReadyDay - w.s.day}d</span>}
+          <Icon.bolt size={14} /><span class="hide-lg">{sp.ability.name}</span>{!ready && <span class="mono dim"> {e.abilityReadyDay - w.s.day}d</span>}
         </button>
         {abilityMenu && (
           <div class="panel" style={{ position: 'absolute', top: 40, right: 0, padding: 6, minWidth: 220, zIndex: 50 }}>
@@ -109,7 +109,7 @@ export function TopBar({ onMenu }: { onMenu: () => void }) {
           {inbox > 0 && <span style={{ position: 'absolute', top: -4, right: -4, background: 'var(--bad)', borderRadius: 999, fontSize: 10, padding: '0 5px', fontWeight: 700 }}>{inbox}</span>}
         </button>
         <button class="btn icon" onClick={() => st.open('empire')} data-tip="Empire overview (E)"><Icon.chart /></button>
-        <button class="btn icon" onClick={() => st.open('battle')} data-tip="Battle reports (B)"><Icon.sword /></button>
+        <button class="btn icon hide-md" onClick={() => st.open('battle')} data-tip="Battle reports (B)"><Icon.sword /></button>
         <button class="btn icon" onClick={() => st.open('encyclopedia')} data-tip="Encyclopedia & how to play (H)"><Icon.book /></button>
       </div>
     </div>

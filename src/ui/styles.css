@@ -206,11 +206,25 @@ table.list tr { cursor: pointer; }
 .event .d { color: var(--text-faint); font-variant-numeric: tabular-nums; min-width: 42px; }
 .event.imp { border-left: 2px solid var(--accent); }
 
+@media (max-width: 1360px) {
+  .hide-lg { display: none !important; }
+  .topbar { gap: 10px; }
+}
 @media (max-width: 1100px) {
   :root { --left: 270px; --right: 340px; }
+  .hide-md { display: none !important; }
 }
+.firststeps { position: absolute; left: calc(var(--left) + 20px); bottom: 16px; z-index: 14; width: 300px; padding: 12px 14px; animation: rise 0.25s ease-out; }
+.firststeps li { margin: 4px 0; font-size: 12.5px; list-style: none; display: flex; gap: 8px; align-items: flex-start; }
+.firststeps li .ck { width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--line-2); flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; margin-top: 1px; }
+.firststeps li.done { color: var(--text-dim); text-decoration: line-through; }
+.firststeps li.done .ck { background: var(--good); border-color: var(--good); color: #032; }
+@keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 207, 106, 0.0); } 50% { box-shadow: 0 0 0 4px rgba(255, 207, 106, 0.35); } }
+.pulse { animation: pulse 1.6s ease-in-out infinite; border-color: var(--warn) !important; }
 @media (max-width: 860px) {
   :root { --topbar: auto; }
+  .firststeps { display: none; }
+  .hide-sm { display: none !important; }
   .topbar { height: auto; flex-wrap: wrap; row-gap: 6px; padding: 6px 8px; }
   .left { display: none; }
   .left.mobile-open { display: flex; width: calc(100% - 16px); z-index: 25; }
