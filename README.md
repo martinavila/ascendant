@@ -12,6 +12,11 @@ npm run build        # static build in dist/ (deploy anywhere)
 
 Dev shortcut: open `http://localhost:5173/?quick` (or `?quick=SEED&stars=600`) to skip the menus.
 
+## 3D and multiplayer
+
+- **3D views:** galaxy map (2D/3D toggle at the top of the map), system view ("3D view" in the system panel), planet globe (Globe/Grid toggle on the planet screen), and battle replays (2D/3D in the replay controls). Ships, stations and buildings are original models generated in Blender: `npm run build-models` (see [docs/MODELS.md](docs/MODELS.md)).
+- **Multiplayer:** deterministic lockstep: every player runs the same simulation and only commands are sent. Main menu → Multiplayer to host or join by room code. Works between tabs on one machine out of the box; for online play add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to `.env.local` (see [docs/MULTIPLAYER.md](docs/MULTIPLAYER.md)).
+
 ## Original content
 
 Everything the game ships with is original: 21 species with their own traits, abilities, lore and procedurally painted portraits (`src/art/portraits.ts`), plus new names for techs, structures, parts and planet types. The design follows Ascendancy's structure (game mechanics aren't copyrightable), but none of its names, text or art ship with the game.

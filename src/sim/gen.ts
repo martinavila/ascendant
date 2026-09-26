@@ -276,10 +276,11 @@ function makePlanet(id: number, star: Star, orbit: number, type: string, size: n
 function placeEmpires(w: World, rng: Rng) {
   const s = w.s;
   const settings = s.settings;
-  const count = Math.min(settings.empires, 16, Math.floor(s.stars.length / 6));
+  const seats = settings.players?.length ? settings.players : null;
+  const count = Math.max(seats?.length ?? 0, Math.min(settings.empires, 16, Math.floor(s.stars.length / 6)));
   // Species: player's choice first, then distinct random picks (repeat only if >12 empires).
-  const species: string[] = [settings.playerSpecies];
-  const pool = rng.shuffle(SPECIES.map((x) => x.id).filter((x) => x !== settings.playerSpecies));
+  const species: string[] = seats ? seats.map((x) => x.species) : [settings.playerSpecies];
+  const pool = rng.shuffle(SPECIES.map((x) => x.id).filter((x) => !species.includes(x)));
   while (species.length < count) species.push(pool.length ? pool.shift()! : rng.pick(SPECIES).id);
 
   // Homeworlds: farthest-point sampling over well-connected stars.
@@ -299,13 +300,14 @@ function placeEmpires(w: World, rng: Rng) {
 
   for (let i = 0; i < count; i++) {
     const sp = SPECIES_BY_ID[species[i]];
-    const human = i === 0 && !settings.spectate;
+    const seat = seats ? seats[i] : i === 0 ? { species: settings.playerSpecies, name: settings.playerName, color: settings.playerColor } : undefined;
+    const human = !!seat && !settings.spectate;
     const usedColors = s.empires.map((e) => e.color);
-    let color = i === 0 && settings.playerColor ? settings.playerColor : sp.color;
+    let color = seat?.color ? seat.color : sp.color;
     if (usedColors.includes(color)) color = EXTRA_COLORS.find((c) => !usedColors.includes(c)) ?? color;
     const e: Empire = {
       id: i,
-      name: i === 0 && settings.playerName ? settings.playerName : `${sp.adjective} ${rng.pick(['Dominion', 'Collective', 'Ascendancy', 'Hegemony', 'Commonwealth', 'Union', 'Directorate', 'Assembly', 'Covenant', 'Throng'])}`,
+      name: seat?.name ? seat.name : `${sp.adjective} ${rng.pick(['Dominion', 'Collective', 'Ascendancy', 'Hegemony', 'Commonwealth', 'Union', 'Directorate', 'Assembly', 'Covenant', 'Throng'])}`,
       species: sp.id, color, human, alive: true, capital: null,
       research: { known: [], current: null, progress: 0, queue: [], auto: !human },
       relations: [], explored: new Array(s.stars.length).fill(0), abilityReadyDay: 30,

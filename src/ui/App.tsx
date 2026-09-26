@@ -18,14 +18,22 @@ import { EmpireScreen } from './screens/Empire';
 import { EncyclopediaScreen } from './screens/Encyclopedia';
 import { SettingsScreen, SavesScreen, VictoryScreen, GameMenu } from './screens/Misc';
 import { setClassicEnabled } from '../art/classic';
+import { Lobby, hostRoom } from './screens/Lobby';
 
 export function App() {
   const st = useStore();
-  const [phase, setPhase] = useState<'menu' | 'new'>('menu');
+  const [phase, setPhase] = useState<'menu' | 'new' | 'mp' | 'mp-host'>(() => (new URLSearchParams(location.search).has('room') ? 'mp' : 'menu'));
   useEffect(() => setClassicEnabled(st.settings.classicArt), []);
+  const initialRoom = new URLSearchParams(location.search).get('room');
+  let body;
+  if (st.world) body = <Game key={st.worldId} />;
+  else if (st.net || phase === 'mp') body = <Lobby onBack={() => setPhase('menu')} onHost={() => setPhase('mp-host')} initialRoom={initialRoom} />;
+  else if (phase === 'mp-host') body = <NewGame onBack={() => setPhase('mp')} onHost={async (s) => { await hostRoom(s); setPhase('mp'); }} />;
+  else if (phase === 'new') body = <NewGame onBack={() => setPhase('menu')} />;
+  else body = <MainMenu onNew={() => setPhase('new')} onMultiplayer={() => setPhase('mp')} />;
   return (
     <>
-      {st.world ? <Game key={st.worldId} /> : phase === 'new' ? <NewGame onBack={() => setPhase('menu')} /> : <MainMenu onNew={() => setPhase('new')} />}
+      {body}
       <TooltipLayer />
       {st.toast && <div class={'panel toast ' + st.toast.kind}>{st.toast.text}</div>}
     </>

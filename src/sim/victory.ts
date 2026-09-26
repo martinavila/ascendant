@@ -67,13 +67,14 @@ export function victoryTick(w: World) {
   }
   const alive = s.empires.filter((e) => e.alive);
   const v = s.settings.victory;
-  const human = s.empires.find((e) => e.human);
+  // Every human seat (one in single-player) has fallen: the game is over.
+  const humans = s.empires.filter((e) => e.human);
   const totalPop = s.empires.reduce((a, x) => a + x.last.pop, 0) || 1;
   const win = (e: Empire, kind: string) => {
     s.winner = { empire: e.id, kind, day: s.day };
     for (const o of s.empires) w.event(o.id, 'victory', `${e.name} wins a ${kind} victory!`, { important: true });
   };
-  if (human && !human.alive && !s.settings.spectate) {
+  if (humans.length && humans.every((h) => !h.alive) && !s.settings.spectate) {
     const best = alive.sort((a, b) => score(w, b) - score(w, a))[0];
     if (best) return win(best, 'Conquest');
   }

@@ -39,7 +39,8 @@ export function createStage(host: HTMLElement, opts: { fov?: number; near?: numb
       ro.disconnect();
       scene.traverse((o) => {
         const m = o as THREE.Mesh;
-        m.geometry?.dispose?.();
+        // Geometry of loaded glTF models is shared with the model cache.
+        if (!o.userData.sharedGeometry) m.geometry?.dispose?.();
         const mats = Array.isArray(m.material) ? m.material : m.material ? [m.material] : [];
         for (const mat of mats) (mat as THREE.Material).dispose();
       });
@@ -201,6 +202,7 @@ export function tint(obj: THREE.Object3D, paint: THREE.ColorRepresentation, glow
   c.traverse((o) => {
     const m = o as THREE.Mesh;
     if (!m.isMesh) return;
+    o.userData.sharedGeometry = true;
     const mats = Array.isArray(m.material) ? m.material : [m.material];
     m.material = mats.map((mat) => {
       const std = (mat as THREE.MeshStandardMaterial).clone();

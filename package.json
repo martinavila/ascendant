@@ -11,7 +11,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "sim": "vite-node scripts/headless.ts",
-    "import-classic": "python3 tools/import_classic.py"
+    "import-classic": "python3 tools/import_classic.py",
+    "build-models": "blender -b --factory-startup --python tools/blender/build_assets.py -- --out public/models"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",

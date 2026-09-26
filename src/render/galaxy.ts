@@ -271,7 +271,7 @@ export class GalaxyView {
   private onKey = (e: KeyboardEvent) => {
     if ((e.target as HTMLElement)?.closest?.('input,textarea,select')) return;
     const k = e.key.toLowerCase();
-    if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) this.keys.add(k);
+    if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) this.keys.add(k);
     if (k === '=' || k === '+') this.zoom = this.clampZoom(this.zoom * 1.2);
     if (k === '-') this.zoom = this.clampZoom(this.zoom / 1.2);
   };
@@ -311,10 +311,10 @@ export class GalaxyView {
     const dt = this.app.ticker.deltaMS / 1000;
     // Keyboard panning.
     const pan = 700 * dt / this.zoom;
-    if (this.keys.has('w') || this.keys.has('arrowup')) this.cy -= pan;
-    if (this.keys.has('s') || this.keys.has('arrowdown')) this.cy += pan;
-    if (this.keys.has('a') || this.keys.has('arrowleft')) this.cx -= pan;
-    if (this.keys.has('d') || this.keys.has('arrowright')) this.cx += pan;
+    if (this.keys.has('arrowup')) this.cy -= pan;
+    if (this.keys.has('arrowdown')) this.cy += pan;
+    if (this.keys.has('arrowleft')) this.cx -= pan;
+    if (this.keys.has('arrowright')) this.cx += pan;
     if (this.anim) {
       const t = Math.min(1, (performance.now() - this.anim.t0) / 450);
       const e = 1 - Math.pow(1 - t, 3);

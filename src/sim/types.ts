@@ -401,6 +401,18 @@ export interface GameSettings {
   victory: { conquest: boolean; domination: number | 0; ascension: boolean; diplomatic: boolean; dayLimit: number | 0 };
   /** Everyone controlled by AI — used for headless sims/tests. */
   spectate?: boolean;
+  /**
+   * Multiplayer: one entry per human seat. Empires 0..n-1 are human (in this
+   * order) and the rest are AI. When absent, empire 0 is the single human
+   * described by playerSpecies/playerName/playerColor.
+   */
+  players?: PlayerSeat[];
+}
+
+export interface PlayerSeat {
+  species: string;
+  name: string;
+  color: string;
 }
 
 export type ProposalKind = 'peace' | 'alliance' | 'trade' | 'gift' | 'endAlliance';

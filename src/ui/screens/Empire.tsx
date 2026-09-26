@@ -1,11 +1,11 @@
 import type { JSX } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { store, useStore } from '../store';
+import { store, useStore, dispatch } from '../store';
 import { Bar, Empty, Modal, Section, act, fmt, plural } from '../common';
 import { EmpireDot, Icon, PlanetOrb, Portrait } from '../icons';
 import { PLANET_TYPE, PROJECT, PROJECTS, SPECIES_BY_ID } from '../../sim/content';
 import { FOCUS_LABEL } from '../../sim/governor';
-import { setFocusAll, setGovernor, setGovernorAll, setPref, setProject } from '../../sim/commands';
+import type { Command } from '../../sim/cmd';
 import { score, victoryProgress } from '../../sim/victory';
 import type { Empire, EmpireStats, GovernorFocus, Planet } from '../../sim/types';
 import type { PlanetEcon, World } from '../../sim/world';
@@ -256,7 +256,7 @@ function Overview({ w, h, gotoPlanets }: { w: World; h: Empire; gotoPlanets: () 
                     <div class="tiny warn ellipsis">{issues.join(' · ')}</div>
                   </div>
                   {!p.governor.on && (
-                    <button class="btn sm" data-tip="Hand this planet to a governor" onClick={(e) => { e.stopPropagation(); setGovernor(w, p, { on: true }); act(undefined, `${p.name} is now governed.`); }}>
+                    <button class="btn sm" data-tip="Hand this planet to a governor" onClick={(e) => { e.stopPropagation(); act(dispatch({ t: 'governor', planet: p.id, patch: { on: true } }), `${p.name} is now governed.`); }}>
                       <Icon.gear size={12} />Govern
                     </button>
                   )}
@@ -272,8 +272,8 @@ function Overview({ w, h, gotoPlanets }: { w: World; h: Empire; gotoPlanets: () 
         <div class="em-card">
           <h3><Icon.gear size={14} />Automation</h3>
           {toggles.map((t) => (
-            <div class="em-toggle" key={t.k} onClick={() => act(setPref(w, h.id, t.k, !h.prefs[t.k]))}>
-              <Switch on={h.prefs[t.k]} onToggle={() => act(setPref(w, h.id, t.k, !h.prefs[t.k]))} />
+            <div class="em-toggle" key={t.k} onClick={() => act(dispatch({ t: 'pref', key: t.k, value: !h.prefs[t.k] }))}>
+              <Switch on={h.prefs[t.k]} onToggle={() => act(dispatch({ t: 'pref', key: t.k, value: !h.prefs[t.k] }))} />
               <div>
                 <div class="t">{t.t}</div>
                 <div class="d">{t.d}</div>
@@ -291,7 +291,7 @@ function Overview({ w, h, gotoPlanets }: { w: World; h: Empire; gotoPlanets: () 
             class="btn primary"
             style={{ width: '100%' }}
             disabled={governed === planets.length}
-            onClick={() => { setGovernorAll(w, h.id, { on: true }); act(undefined, `All ${plural(planets.length, 'planet')} are now under a governor.`); }}
+            onClick={() => { act(dispatch({ t: 'governorAll', patch: { on: true } }), `All ${plural(planets.length, 'planet')} are now under a governor.`); }}
           >
             <Icon.gear size={14} />Put every planet under a governor
           </button>
@@ -303,13 +303,13 @@ function Overview({ w, h, gotoPlanets }: { w: World; h: Empire; gotoPlanets: () 
             <button
               class="btn sm"
               disabled={!governed}
-              onClick={() => { setGovernorAll(w, h.id, { focus }, (p) => p.governor.on); act(undefined, `${plural(governed, 'governed planet')} now focus on ${FOCUS_LABEL[focus]}.`); }}
+              onClick={() => { act(dispatch({ t: 'governorAll', patch: { focus }, onlyGoverned: true }), `${plural(governed, 'governed planet')} now focus on ${FOCUS_LABEL[focus]}.`); }}
             >Apply</button>
           </div>
           <button
             class="btn sm ghost"
             style={{ marginTop: 8 }}
-            onClick={() => { setFocusAll(w, h.id, focus); act(undefined, `Every planet is governed with a ${FOCUS_LABEL[focus]} focus.`); }}
+            onClick={() => { act(dispatch({ t: 'focusAll', focus }), `Every planet is governed with a ${FOCUS_LABEL[focus]} focus.`); }}
             data-tip="Also turns the governor on for manual planets"
           >Govern all with {FOCUS_LABEL[focus]} focus</button>
         </div>
@@ -385,10 +385,7 @@ function PlanetsTab({ w, h }: { w: World; h: Empire }) {
   const toggleSel = (id: number) => { const n = new Set(sel); if (n.has(id)) n.delete(id); else n.add(id); setSel(n); };
   const projects = PROJECTS.filter((pr) => !pr.tech || w.knows(h.id, pr.tech));
 
-  const bulk = (fn: (p: Planet) => void, msg: string) => {
-    for (const id of selected) fn(w.s.planets[id]);
-    act(undefined, msg);
-  };
+  const bulk = (cmd: Command, msg: string) => act(dispatch(cmd), msg);
 
   const Th = ({ k, label, cls, tip }: { k: SortKey; label: string; cls?: string; tip?: string }) => (
     <th class={cls} data-tip={tip} onClick={() => setSort((s) => ({ key: k, dir: s.key === k ? (-s.dir as 1 | -1) : k === 'name' || k === 'system' || k === 'type' || k === 'build' ? 1 : -1 }))}>
@@ -415,13 +412,13 @@ function PlanetsTab({ w, h }: { w: World; h: Empire }) {
       {selected.length > 0 && (
         <div class="em-bulk">
           <b>{plural(selected.length, 'planet')} selected</b>
-          <button class="btn sm" onClick={() => bulk((p) => setGovernor(w, p, { on: true }), `Governor on for ${plural(selected.length, 'planet')}.`)}><Icon.gear size={12} />Governor on</button>
-          <button class="btn sm" onClick={() => bulk((p) => setGovernor(w, p, { on: false }), `Governor off for ${plural(selected.length, 'planet')}.`)}>Governor off</button>
-          <select value="" onChange={(e) => { const f = (e.currentTarget as HTMLSelectElement).value as GovernorFocus; if (f) bulk((p) => setGovernor(w, p, { on: true, focus: f }), `${plural(selected.length, 'planet')} set to ${FOCUS_LABEL[f]} focus.`); }}>
+          <button class="btn sm" onClick={() => bulk({ t: 'governorMany', planets: [...selected], patch: { on: true } }, `Governor on for ${plural(selected.length, 'planet')}.`)}><Icon.gear size={12} />Governor on</button>
+          <button class="btn sm" onClick={() => bulk({ t: 'governorMany', planets: [...selected], patch: { on: false } }, `Governor off for ${plural(selected.length, 'planet')}.`)}>Governor off</button>
+          <select value="" onChange={(e) => { const f = (e.currentTarget as HTMLSelectElement).value as GovernorFocus; if (f) bulk({ t: 'governorMany', planets: [...selected], patch: { on: true, focus: f } }, `${plural(selected.length, 'planet')} set to ${FOCUS_LABEL[f]} focus.`); }}>
             <option value="">Set focus…</option>
             {FOCUSES.map((f) => <option key={f} value={f}>{FOCUS_LABEL[f]}</option>)}
           </select>
-          <select value="" onChange={(e) => { const v = (e.currentTarget as HTMLSelectElement).value; if (!v) return; const pr = v === '-' ? null : v; bulk((p) => setProject(w, p, pr), pr ? `${PROJECT[pr].name} set on ${plural(selected.length, 'planet')}.` : 'Projects cleared.'); }}>
+          <select value="" onChange={(e) => { const v = (e.currentTarget as HTMLSelectElement).value; if (!v) return; const pr = v === '-' ? null : v; bulk({ t: 'project', planets: [...selected], project: pr }, pr ? `${PROJECT[pr].name} set on ${plural(selected.length, 'planet')}.` : 'Projects cleared.'); }}>
             <option value="">Set idle project…</option>
             <option value="-">No project</option>
             {projects.map((pr) => <option key={pr.id} value={pr.id}>{pr.name}</option>)}
@@ -461,7 +458,7 @@ function PlanetsTab({ w, h }: { w: World; h: Empire }) {
   );
 }
 
-function PlanetRow({ w, h, r, checked, onCheck }: { w: World; h: Empire; r: Row; checked: boolean; onCheck: () => void }) {
+function PlanetRow({ h, r, checked, onCheck }: { w: World; h: Empire; r: Row; checked: boolean; onCheck: () => void }) {
   const { p, ec } = r;
   const stop = (e: Event) => e.stopPropagation();
   const capital = h.capital === p.id;
@@ -478,11 +475,11 @@ function PlanetRow({ w, h, r, checked, onCheck }: { w: World; h: Empire; r: Row;
       <td class="num pro">{fmt(ec.yield.pro, ec.yield.pro < 10 && ec.yield.pro % 1 ? 1 : 0)}</td>
       <td onClick={stop}>
         <div class="em-gov">
-          <Switch small on={p.governor.on} tip={p.governor.on ? 'Governor on — click to manage by hand' : 'Managed by hand — click to hand over to a governor'} onToggle={() => { setGovernor(w, p, { on: !p.governor.on }); act(); }} />
+          <Switch small on={p.governor.on} tip={p.governor.on ? 'Governor on — click to manage by hand' : 'Managed by hand — click to hand over to a governor'} onToggle={() => act(dispatch({ t: 'governor', planet: p.id, patch: { on: !p.governor.on } }))} />
           <select
             value={p.governor.focus}
             style={{ opacity: p.governor.on ? 1 : 0.5 }}
-            onChange={(e) => { setGovernor(w, p, { focus: (e.currentTarget as HTMLSelectElement).value as GovernorFocus }); act(); }}
+            onChange={(e) => act(dispatch({ t: 'governor', planet: p.id, patch: { focus: (e.currentTarget as HTMLSelectElement).value as GovernorFocus } }))}
           >
             {FOCUSES.map((f) => <option key={f} value={f}>{FOCUS_LABEL[f]}</option>)}
           </select>

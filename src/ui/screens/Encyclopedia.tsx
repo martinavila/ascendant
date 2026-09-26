@@ -1,13 +1,13 @@
 import type { ComponentChildren, JSX } from 'preact';
 import { createContext } from 'preact';
 import { useContext, useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { store, useStore } from '../store';
+import { store, useStore, dispatch } from '../store';
 import { Modal, Yields, act, fmt } from '../common';
 import { BuildingIcon, Icon, PartIcon, PlanetOrb, Portrait, ShipImage } from '../icons';
 import {
   BUILDING, BUILDINGS, HULL, HULLS, PART, PARTS, PLANET_TYPE, PLANET_TYPES, PROJECT, PROJECTS, SPECIES, SPECIES_BY_ID, TECH, TECHS, TERRAFORM_NEXT, unlocksOf,
 } from '../../sim/content';
-import { researchTowards, techPath } from '../../sim/commands';
+import { techPath } from '../../sim/commands';
 import { AUTO_EFFICIENCY, ASCENSION_COST } from '../../sim/world';
 import type { BuildingDef, HullDef, PartDef, PlanetTypeDef, ProjectDef, SpeciesDef, TechCategory } from '../../sim/types';
 
@@ -205,7 +205,7 @@ const GUIDES: Guide[] = [
             ['Space', 'Pause / resume'], ['1  2  3', 'Game speed'], ['4', 'Run until the next important event'],
             ['R', 'Research'], ['D', 'Ship designer'], ['P', 'Diplomacy'], ['E', 'Empire overview'], ['H', 'Encyclopedia (this screen)'],
             ['M', 'Toggle the governor on the open planet'], ['N', 'Next idle planet'], ['F', 'Fit the whole galaxy on screen'],
-            ['W A S D', 'Pan the map'], ['+  −', 'Zoom'], ['Esc', 'Close the current screen / cancel'],
+            ['Arrow keys', 'Pan the map'], ['+  −', 'Zoom'], ['Esc', 'Close the current screen / cancel'],
           ] as [string, string][]).map(([k, d]) => (
             <tr key={k}><td style={{ width: 150 }}>{k.split('  ').map((x) => <><K>{x}</K> </>)}</td><td>{d}</td></tr>
           ))}
@@ -781,7 +781,7 @@ function TechArticle({ id }: { id: string }) {
           <div class="row wrap">
             {known ? <span class="ency-status known">✓ Researched</span> : current ? <span class="ency-status cur">Researching now</span> : queued ? <span class="ency-status cur">Queued</span> : <span class="ency-status">Not researched</span>}
             {!known && !current && w && h && (
-              <button class="btn sm primary" onClick={() => { researchTowards(w, h.id, id); act(undefined, path.length > 1 ? `Researching toward ${t.name} (${path.length} steps).` : `Researching ${t.name}.`); }}>
+              <button class="btn sm primary" onClick={() => { dispatch({ t: 'researchTowards', tech: id }); act(undefined, path.length > 1 ? `Researching toward ${t.name} (${path.length} steps).` : `Researching ${t.name}.`); }}>
                 <Icon.flask size={13} />Research {path.length > 1 ? `(${path.length} steps)` : 'now'}
               </button>
             )}

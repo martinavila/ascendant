@@ -1,10 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { store, useStore } from '../store';
+import { store, useStore, dispatch } from '../store';
 import { Bar, Modal, Section, act, fmt } from '../common';
 import { Icon } from '../icons';
 import { TECH, TECHS, unlocksOf } from '../../sim/content';
 import type { TechWithTier } from '../../sim/content/techs';
-import { dequeueResearch, researchTowards, setPref, techPath } from '../../sim/commands';
+import { techPath } from '../../sim/commands';
 import { availableTechs } from '../../sim/economy';
 import type { Empire, TechCategory } from '../../sim/types';
 import type { World } from '../../sim/world';
@@ -593,31 +593,12 @@ function ResearchBody({ w, e }: { w: World; e: Empire }) {
     if (knows(id)) { store.notify(`${t.name} is already known.`); return; }
     if (append && (id === cur || qPos.has(id))) { store.notify(`${t.name} is already ${id === cur ? 'being researched' : 'queued'}.`); return; }
     const path = techPath(w, e.id, id);
-    const prev = cur;
-    researchTowards(w, e.id, id, append);
-    // Switching drops the old current tech from the plan; keep it, right after the new path.
-    if (!append && prev && prev !== r.current && !knows(prev) && !r.queue.includes(prev)) {
-      r.queue = [...r.queue.slice(0, path.length - 1), prev, ...r.queue.slice(path.length - 1)];
-    }
-    normalizeQueue();
+    // keepPrevious: switching keeps the old current tech in the plan, right after the new path.
+    dispatch({ t: 'researchTowards', tech: id, append, keepPrevious: true });
     const extra = path.length - 1;
     act(null, append
       ? `Queued ${t.name}${extra ? ` (+${extra} prerequisite${extra > 1 ? 's' : ''})` : ''}.`
       : extra ? `Researching ${TECH[path[0]].name}: ${path.length} steps to ${t.name}.` : `Researching ${t.name}.`);
-  };
-  /** The sim silently drops a queued tech whose prerequisites aren't known yet when
-   *  it comes up, so keep every queued tech after its queued prerequisites. */
-  const normalizeQueue = () => {
-    const qq = r.queue, inQ = new Set(qq), seen = new Set<string>(), out: string[] = [];
-    const visit = (id: string) => {
-      if (seen.has(id)) return;
-      seen.add(id);
-      for (const p of TECH[id]?.prereqs ?? []) if (inQ.has(p)) visit(p);
-      out.push(id);
-    };
-    qq.forEach(visit);
-    if (out.some((id, i) => id !== qq[i])) r.queue = out;
-    w.touch();
   };
   const canSwap = (i: number, j: number) => {
     const a = r.queue[i], b = r.queue[j];
@@ -636,18 +617,15 @@ function ResearchBody({ w, e }: { w: World; e: Empire }) {
     }
     const qq = [...r.queue];
     [qq[i], qq[j]] = [qq[j], qq[i]];
-    r.queue = qq;
-    w.touch();
-    store.emit();
+    dispatch({ t: 'setResearchQueue', queue: qq });
   };
   const dependentsQueued = (id: string) => r.queue.filter((x) => L.ancestors[x]?.has(id));
   const removeQueued = (id: string) => {
     const deps = dependentsQueued(id);
-    dequeueResearch(w, e.id, id);
-    for (const d of deps) dequeueResearch(w, e.id, d);
+    dispatch({ t: 'dequeueResearch', techs: [id, ...deps] });
     act(null, deps.length ? `Removed ${TECH[id]?.name} and ${deps.length} dependent tech${deps.length > 1 ? 's' : ''}.` : undefined);
   };
-  const clearQueue = () => { for (const id of [...r.queue]) dequeueResearch(w, e.id, id); act(null, 'Research queue cleared.'); };
+  const clearQueue = () => act(dispatch({ t: 'dequeueResearch', techs: [...r.queue] }), 'Research queue cleared.');
 
   // --- render: web ------------------------------------------------------------
   const vb = `${r1(view.x - size.w / 2 / sc)} ${r1(view.y - size.h / 2 / sc)} ${r1(size.w / sc)} ${r1(size.h / sc)}`;
@@ -917,7 +895,7 @@ function ResearchBody({ w, e }: { w: World; e: Empire }) {
             <div class="small dim">Empty. Click a distant tech to queue its whole prerequisite path, or shift-click to append.</div>
           )}
           <label class="rs-switch" data-tip="When nothing is queued, your science council picks the next technology automatically.">
-            <input type="checkbox" checked={e.prefs.autoResearch} onChange={(ev) => act(setPref(w, e.id, 'autoResearch', (ev.currentTarget as HTMLInputElement).checked))} />
+            <input type="checkbox" checked={e.prefs.autoResearch} onChange={(ev) => act(dispatch({ t: 'pref', key: 'autoResearch', value: (ev.currentTarget as HTMLInputElement).checked }))} />
             <i />
             <span>Auto-research when idle</span>
           </label>

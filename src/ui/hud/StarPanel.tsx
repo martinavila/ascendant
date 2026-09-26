@@ -1,14 +1,14 @@
-import { store, useStore } from '../store';
+import { store, useStore, dispatch } from '../store';
 import { PlanetOrb, Icon, ShipImage } from '../icons';
 import { Section, Yields, act, fmt, Empty } from '../common';
 import { PLANET_TYPE } from '../../sim/content';
 import { STAR_LABEL, sunCanvas } from '../../art/procedural';
 import { classicSun } from '../../art/classic';
 import { fleetVisible } from '../../sim/visibility';
-import { orderColonize } from '../../sim/commands';
-import { abilityCheck, useAbility } from '../../sim/abilities';
+import { abilityCheck } from '../../sim/abilities';
 import type { Planet } from '../../sim/types';
-import { useMemo } from 'preact/hooks';
+import { useMemo, useState } from 'preact/hooks';
+import { SystemView3D } from './SystemView3D';
 
 const SIZE_NAME = ['Tiny', 'Small', 'Medium', 'Large', 'Huge'];
 
@@ -25,13 +25,17 @@ export function StarPanel({ starId }: { starId: number }) {
   const sp = w.species(human);
 
   const open = (p: Planet) => store.select({ planet: p.id, star: starId });
+  const [view3d, setView3d] = useState(false);
 
   return (
     <div class="col" style={{ gap: 0, minHeight: 0, flex: 1 }}>
       <div class="section" style={{ position: 'relative', overflow: 'hidden', minHeight: 150 }}>
         <img src={sunUrl} style={{ position: 'absolute', right: -60, top: -50, width: 230, height: 230, opacity: 0.9, pointerEvents: 'none' }} />
         <div style={{ position: 'relative' }}>
-          <h2 style={{ fontSize: 22 }}>{star.name}</h2>
+          <div class="row" style={{ gap: 8 }}>
+            <h2 style={{ fontSize: 22 }}>{star.name}</h2>
+            {ex === 2 && <button class="btn sm" onClick={() => setView3d(true)} data-tip="View this system in 3D">3D view</button>}
+          </div>
           <div class="dim small">{STAR_LABEL[star.cls]} · {star.lanes.length} lane{star.lanes.length === 1 ? '' : 's'}{star.lanes.some((l) => w.s.lanes[l].unstable) ? ' (some unstable)' : ''}</div>
           {ex === 0 && <div class="warn small" style={{ marginTop: 8 }}>Unexplored. Send a ship to survey it.</div>}
           {ex === 1 && <div class="dim small" style={{ marginTop: 8 }}>Charted from afar. Details appear once a ship or sensor reaches it.</div>}
@@ -43,6 +47,7 @@ export function StarPanel({ starId }: { starId: number }) {
           )}
         </div>
       </div>
+      {view3d && <SystemView3D starId={starId} onClose={() => setView3d(false)} />}
       <div class="scroll" style={{ flex: 1 }}>
         {ex === 2 && (
           <Section title={`Planets · ${planets.length}`}>
@@ -76,13 +81,13 @@ export function StarPanel({ starId }: { starId: number }) {
                   </div>
                   <div class="col" style={{ gap: 4, alignItems: 'flex-end' }}>
                     {!owner && colonizers.length > 0 && p.type !== 'gasgiant' && colonizers.some((f) => f.ships.some((id) => w.statsOf(w.s.ships[id]).colony > 0)) && (
-                      <button class="btn sm primary" onClick={(ev) => { ev.stopPropagation(); act(orderColonize(w, colonizers.find((f) => f.ships.some((id) => w.statsOf(w.s.ships[id]).colony > 0))!, p.id), 'Colonists are landing.'); }}>Colonize</button>
+                      <button class="btn sm primary" onClick={(ev) => { ev.stopPropagation(); act(dispatch({ t: 'colonize', fleet: colonizers.find((f) => f.ships.some((id) => w.statsOf(w.s.ships[id]).colony > 0))!.id, planet: p.id }), 'Colonists are landing.'); }}>Colonize</button>
                     )}
                     {!owner && colonizers.some((f) => f.ships.some((id) => w.statsOf(w.s.ships[id]).outpost > 0)) && (
-                      <button class="btn sm" onClick={(ev) => { ev.stopPropagation(); act(orderColonize(w, colonizers.find((f) => f.ships.some((id) => w.statsOf(w.s.ships[id]).outpost > 0))!, p.id, true), 'Outpost established.'); }}>Outpost</button>
+                      <button class="btn sm" onClick={(ev) => { ev.stopPropagation(); act(dispatch({ t: 'colonize', fleet: colonizers.find((f) => f.ships.some((id) => w.statsOf(w.s.ships[id]).outpost > 0))!.id, planet: p.id, outpost: true }), 'Outpost established.'); }}>Outpost</button>
                     )}
                     {abilityOk && (
-                      <button class="btn sm" onClick={(ev) => { ev.stopPropagation(); const err = useAbility(w, human.id, { planet: p.id }); if (err) store.notify(err, 'error'); store.emit(); }} data-tip={sp.ability.desc}><Icon.bolt size={12} />{sp.ability.name}</button>
+                      <button class="btn sm" onClick={(ev) => { ev.stopPropagation(); act(dispatch({ t: 'ability', target: { planet: p.id } })); }} data-tip={sp.ability.desc}><Icon.bolt size={12} />{sp.ability.name}</button>
                     )}
                   </div>
                 </div>

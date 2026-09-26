@@ -1,10 +1,10 @@
 import type { JSX } from 'preact';
 import { useEffect, useMemo, useState } from 'preact/hooks';
-import { store, useStore } from '../store';
+import { store, useStore, dispatch } from '../store';
 import { Modal, Bar, act, fmt } from '../common';
 import { Icon, PartIcon, ShipImage } from '../icons';
 import { HULLS, HULL, PART, PARTS, TECH, SPECIES_BY_ID } from '../../sim/content';
-import { saveDesign, suggestDesign, inferRole, setObsolete, refitFleetTo } from '../../sim/commands';
+import { suggestDesign, inferRole } from '../../sim/commands';
 import { bestParts, type DesignRole } from '../../sim/ai/designer';
 import type { Empire, PartDef, ShipDesign } from '../../sim/types';
 import type { ShipStats, World } from '../../sim/world';
@@ -265,19 +265,23 @@ function Designer({ w, human, arg }: { w: World; human: Empire; arg: DesignerArg
     if (saved) setCompareId(saved.id);
   };
 
-  const save = (asNew: boolean): ShipDesign | null => {
+  /** Save the draft (optionally queueing refits for a fleet in the same command). */
+  const save = (asNew: boolean, refitFleet?: number): boolean => {
     const name = draft.name.trim() || autoName(w, e, role);
-    if (!draft.parts.some(Boolean)) { store.notify('Add at least one part before saving.', 'error'); return null; }
-    const d = saveDesign(w, e, { id: asNew ? undefined : draft.id, name, hull: draft.hull, parts: draft.parts });
-    setDraft((x) => ({ ...x, id: d.id, name: d.name, nameDirty: true }));
-    act(null, asNew || draft.id == null ? `Design “${d.name}” saved.` : `Design “${d.name}” updated.`);
-    return d;
+    if (!draft.parts.some(Boolean)) { store.notify('Add at least one part before saving.', 'error'); return false; }
+    const fresh = asNew || draft.id == null;
+    dispatch({ t: 'saveDesign', design: { id: asNew ? undefined : draft.id, name, hull: draft.hull, parts: draft.parts }, refitFleet }, (r) => {
+      if (typeof r.value === 'number') setDraft((x) => ({ ...x, id: r.value as number, name, nameDirty: true }));
+      if (refitFleet === undefined) act(r.ok ? null : r, r.ok ? (fresh ? `Design “${name}” saved.` : `Design “${name}” updated.`) : undefined);
+      else act(r, r.ok ? `Design “${name}” saved; refits queued at the shipyard.` : undefined);
+    });
+    return true;
   };
 
   const toggleObsolete = () => {
     if (!saved) return;
-    setObsolete(w, saved, !saved.obsolete);
-    act(null, saved.obsolete ? `${saved.name} marked obsolete.` : `${saved.name} restored.`);
+    const was = saved.obsolete;
+    act(dispatch({ t: 'obsolete', design: saved.id, obsolete: !was }), !was ? `${saved.name} marked obsolete.` : `${saved.name} restored.`);
   };
 
   // --- refit --------------------------------------------------------------
@@ -294,10 +298,8 @@ function Designer({ w, human, arg }: { w: World; human: Empire; arg: DesignerArg
 
   const refit = () => {
     if (!fleet) return;
-    const d = dirty || !saved ? save(false) : saved;
-    if (!d) return;
-    const r = refitFleetTo(w, fleet, d.id);
-    act(r, r.ok ? `Refits for ${fleet.name} queued at the shipyard.` : undefined);
+    if (dirty || !saved) { save(false, fleet.id); return; }
+    act(dispatch({ t: 'refitFleet', fleet: fleet.id, design: saved.id }), `Refits for ${fleet.name} queued at the shipyard.`);
   };
 
   // --- keyboard -----------------------------------------------------------

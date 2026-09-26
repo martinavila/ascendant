@@ -8,6 +8,7 @@ import { store } from './store';
 import { portrait, Icon } from './icons';
 import { nebulaCanvas } from '../art/procedural';
 import { classicAvailable } from '../art/classic';
+import { loadProfile } from '../net';
 
 const SIZES = [
   { label: 'Tiny', stars: 40, empires: 3 },
@@ -40,7 +41,7 @@ function Backdrop() {
   return <canvas ref={ref} class="neb" />;
 }
 
-export function MainMenu({ onNew }: { onNew: () => void }) {
+export function MainMenu({ onNew, onMultiplayer }: { onNew: () => void; onMultiplayer: () => void }) {
   const [saves, setSaves] = useState<SaveMeta[]>([]);
   const [busy, setBusy] = useState(false);
   const refresh = () => void listSaves().then(setSaves);
@@ -76,6 +77,7 @@ export function MainMenu({ onNew }: { onNew: () => void }) {
         <div class="col" style={{ alignItems: 'center', marginTop: 40, gap: 10 }}>
           {saves.length > 0 && <button class="btn primary" style={{ width: 280, padding: 12, fontSize: 16 }} disabled={busy} onClick={() => load(saves[0].slot)}>Continue — {saves[0].name}, day {saves[0].day}</button>}
           <button class={'btn ' + (saves.length ? '' : 'primary')} style={{ width: 280, padding: 12, fontSize: 16 }} onClick={onNew}>New Game</button>
+          <button class="btn" style={{ width: 280, padding: 10, fontSize: 15 }} onClick={onMultiplayer} data-tip="Play with friends online, or with another tab of this browser">Multiplayer</button>
           <button class="btn" style={{ width: 280 }} onClick={importSave}>Import save file…</button>
         </div>
         {saves.length > 0 && (
@@ -100,8 +102,14 @@ export function MainMenu({ onNew }: { onNew: () => void }) {
   );
 }
 
-export function NewGame({ onBack }: { onBack: () => void }) {
-  const [s, setS] = useState<GameSettings>({ ...DEFAULT_SETTINGS, seed: Math.floor(Math.random() * 1e9) });
+export function NewGame({ onBack, onHost }: { onBack: () => void; /** Multiplayer: create a room with these settings instead of starting. */ onHost?: (s: GameSettings) => Promise<void> }) {
+  const [s, setS] = useState<GameSettings>(() => {
+    const base = { ...DEFAULT_SETTINGS, seed: Math.floor(Math.random() * 1e9) };
+    if (!onHost) return base;
+    // Hosting: start from the saved multiplayer profile, and a smaller galaxy.
+    const p = loadProfile();
+    return { ...base, playerSpecies: p.species, playerName: p.name, playerColor: p.color, stars: 80, empires: 4 };
+  });
   const [busy, setBusy] = useState(false);
   const sp = SPECIES.find((x) => x.id === s.playerSpecies)!;
   const set = (patch: Partial<GameSettings>) => setS((x) => ({ ...x, ...patch }));
@@ -111,6 +119,12 @@ export function NewGame({ onBack }: { onBack: () => void }) {
 
   const start = () => {
     setBusy(true);
+    if (onHost) {
+      void onHost({ ...s, empires: Math.min(s.empires, maxEmpires), playerName: s.playerName || `${sp.adjective} ${names[0]}` })
+        .catch((e) => store.notify('Could not create the room: ' + (e as Error).message, 'error'))
+        .finally(() => setBusy(false));
+      return;
+    }
     setTimeout(() => {
       const w = newGame({ ...s, empires: Math.min(s.empires, maxEmpires), playerName: s.playerName || `${sp.adjective} ${names[0]}` });
       visibilityTick(w);
@@ -125,13 +139,14 @@ export function NewGame({ onBack }: { onBack: () => void }) {
       <div style={{ position: 'relative', maxWidth: 1180, margin: '0 auto', padding: '28px 20px 40px' }}>
         <div class="row" style={{ marginBottom: 16 }}>
           <button class="btn ghost" onClick={onBack}>← Back</button>
-          <h1 style={{ fontSize: 28 }}>New Game</h1>
+          <h1 style={{ fontSize: 28 }}>{onHost ? 'Host a Multiplayer Game' : 'New Game'}</h1>
           <div class="spacer" />
-          <button class="btn primary" style={{ padding: '10px 22px', fontSize: 16 }} disabled={busy} onClick={start}>{busy ? 'Forming galaxy…' : 'Begin'}</button>
+          <button class="btn primary" style={{ padding: '10px 22px', fontSize: 16 }} disabled={busy} onClick={start}>{busy ? (onHost ? 'Opening room…' : 'Forming galaxy…') : onHost ? 'Create room' : 'Begin'}</button>
         </div>
         <div class="row" style={{ alignItems: 'stretch', gap: 16, flexWrap: 'wrap' }}>
           <div class="panel" style={{ flex: '2 1 560px', padding: 16 }}>
             <div class="caps" style={{ marginBottom: 10 }}>Choose your species</div>
+            {onHost && <div class="small dim" style={{ marginBottom: 10 }}>Each player picks their own species in the lobby. "Empires" below is the total, including AI rivals (never fewer than the players who join).</div>}
             <div class="species-grid">
               {SPECIES.map((x) => (
                 <div key={x.id} class={'species-card ' + (x.id === s.playerSpecies ? 'on' : '')} onClick={() => set({ playerSpecies: x.id, playerName: `${x.adjective} ${names[x.id.length % names.length]}` })}>

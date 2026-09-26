@@ -1,9 +1,10 @@
 import { useState } from 'preact/hooks';
-import { store, useStore } from '../store';
+import { store, useStore, dispatch } from '../store';
 import { Icon, Portrait } from '../icons';
-import { Bar, fmt } from '../common';
+import { Bar, fmt, act } from '../common';
 import { TECH } from '../../sim/content';
-import { abilityCheck, abilityReady, useAbility } from '../../sim/abilities';
+import { abilityCheck, abilityReady } from '../../sim/abilities';
+import { NetBadge } from './NetPanel';
 
 export const SPEEDS = [
   { v: 2, label: 'Slow', key: '1' },
@@ -30,16 +31,12 @@ export function TopBar({ onMenu }: { onMenu: () => void }) {
   const useAb = () => {
     const t = sp.ability.target;
     if (t === 'none') {
-      const err = useAbility(w, e.id, {});
-      if (err) store.notify(err, 'error');
-      store.emit();
+      act(dispatch({ t: 'ability', target: {} }));
     } else if (t === 'star') {
       store.pick = {
         kind: 'ability', hint: `${sp.ability.name}: choose a star`, onPick: (star) => {
-          const err = useAbility(w, e.id, { star });
           store.pick = null;
-          if (err) store.notify(err, 'error');
-          store.emit();
+          act(dispatch({ t: 'ability', target: { star } }));
         },
       };
       store.emit();
@@ -91,15 +88,14 @@ export function TopBar({ onMenu }: { onMenu: () => void }) {
           <div class="panel" style={{ position: 'absolute', top: 40, right: 0, padding: 6, minWidth: 220, zIndex: 50 }}>
             {w.s.empires.filter((o) => o.id !== e.id && o.alive && e.relations[o.id].met).map((o) => (
               <button key={o.id} class="btn ghost sm" style={{ width: '100%', justifyContent: 'flex-start' }} disabled={!!abilityCheck(w, e.id, { empire: o.id })} onClick={() => {
-                const err = useAbility(w, e.id, { empire: o.id });
-                if (err) store.notify(err, 'error');
                 setAbilityMenu(false);
-                store.emit();
+                act(dispatch({ t: 'ability', target: { empire: o.id } }));
               }}><span class="dot" style={{ background: o.color }} /> {o.name}</button>
             ))}
           </div>
         )}
       </div>
+      <NetBadge />
       <div class="row" style={{ gap: 4 }}>
         {idle > 0 && <button class="btn sm" onClick={() => nextIdle()} data-tip="Planets with nothing to do and no governor (N)"><span class="warn">{idle} idle</span></button>}
         <button class="btn icon" onClick={() => st.open('research')} data-tip="Research (R)"><Icon.res /></button>

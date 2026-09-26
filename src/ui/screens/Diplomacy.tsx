@@ -1,14 +1,14 @@
 import type { ComponentChildren } from 'preact';
 import { useEffect, useMemo, useState } from 'preact/hooks';
-import { store, useStore } from '../store';
+import { store, useStore, dispatch } from '../store';
 import { Bar, Empty, Modal, Section, fmt, plural } from '../common';
 import { Icon, Portrait, EmpireDot } from '../icons';
 import { TECH } from '../../sim/content';
 import {
-  attitude, declareWar, describe, empirePower, evaluate, metEmpires, propose, respond,
+  attitude, describe, empirePower, evaluate, metEmpires,
   type Evaluation,
 } from '../../sim/diplomacy';
-import { abilityCheck, useAbility } from '../../sim/abilities';
+import { abilityCheck } from '../../sim/abilities';
 import type { AiPersonality, Empire, Proposal, Stance } from '../../sim/types';
 import type { World } from '../../sim/world';
 
@@ -181,9 +181,9 @@ export function DiplomacyScreen() {
 
   const answer = (p: Proposal, accept: boolean) => {
     const from = w.s.empires[p.from];
-    respond(w, p.id, accept);
-    store.notify(accept ? `Accepted ${describe(w, p)} with the ${from.name}.` : `Declined ${describe(w, p)}. The ${from.name} are displeased (−5).`);
-    store.emit();
+    dispatch({ t: 'respond', proposal: p.id, accept }, (r) => {
+      if (r.ok) store.notify(accept ? `Accepted ${describe(w, p)} with the ${from.name}.` : `Declined ${describe(w, p)}. The ${from.name} are displeased (−5).`);
+    });
   };
 
   // --- left column ---------------------------------------------------------
@@ -277,11 +277,13 @@ export function DiplomacyScreen() {
   // --- actions ---------------------------------------------------------------
   const base = { from: human.id, to: them.id };
   const send = (d: Draft, doneMsg: string) => {
-    const r = propose(w, d);
-    if (r === 'pending') store.notify('Proposal sent.');
-    else if (r.accept) store.notify(`The ${them.name} accept ${describe(w, d)}. ${doneMsg}`);
-    else store.notify(`The ${them.name} refuse ${describe(w, d)}: ${r.reasons.filter((x) => !x.startsWith('Attitude')).join('; ') || 'not interested'}.`, 'error');
-    store.emit();
+    dispatch({ t: 'propose', to: d.to, kind: d.kind, give: d.give, get: d.get }, (res) => {
+      if (!res.ok) return;
+      const r = res.value as Evaluation | 'pending';
+      if (r === 'pending') store.notify(them.human ? `Proposal sent to the ${them.name}.` : 'Proposal sent.');
+      else if (r.accept) store.notify(`The ${them.name} accept ${describe(w, d)}. ${doneMsg}`);
+      else store.notify(`The ${them.name} refuse ${describe(w, d)}: ${r.reasons.filter((x) => !x.startsWith('Attitude')).join('; ') || 'not interested'}.`, 'error');
+    });
   };
 
   const pesterNote = 'A refusal costs −3 attitude ("Pestering us").';
@@ -316,9 +318,7 @@ export function DiplomacyScreen() {
       </div>
     ),
     run: () => {
-      declareWar(w, human.id, them.id);
-      store.notify(`War declared on the ${them.name}.`, 'error');
-      store.emit();
+      dispatch({ t: 'declareWar', target: them.id }, (r) => { if (r.ok) store.notify(`War declared on the ${them.name}.`, 'error'); });
     },
   });
   const askEnd = () => setConfirm({
@@ -411,9 +411,9 @@ export function DiplomacyScreen() {
           <div class="small dim" style={{ marginTop: 4 }}>{ability.desc}</div>
           {accordErr && <div class="tiny warn" style={{ marginTop: 4 }}>{accordErr}</div>}
           <button class="btn sm primary" style={{ marginTop: 8, width: '100%' }} disabled={!!accordErr} onClick={() => {
-            const err = useAbility(w, human.id, { empire: them.id });
-            if (err) store.notify(err, 'error'); else store.notify(`Grand Accord: the ${them.name} warm to you (+40 for a year).`);
-            store.emit();
+            dispatch({ t: 'ability', target: { empire: them.id } }, (r) => {
+              if (r.ok) store.notify(`Grand Accord: the ${them.name} warm to you (+40 for a year).`);
+            });
           }}>Invoke {ability.name}</button>
         </ActionCard>
       )}

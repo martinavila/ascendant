@@ -6,6 +6,7 @@ import { BUILDING, PART, SPECIES_BY_ID } from '../../sim/content';
 import { shipPath, STAR_COLORS } from '../../art/procedural';
 import type { BattleReport, BattleShipSnap } from '../../sim/types';
 import type { World } from '../../sim/world';
+import type { BattleScene, BattleSceneSource } from '../../render3d/BattleScene';
 
 // ---------------------------------------------------------------------------
 // Battle replay. The sim records one frame per round: unit positions/hp and
@@ -176,6 +177,44 @@ function unitAt(rp: Replay, id: number, t: number) {
   let shield = a[3];
   if (b && smax > 0) shield = p < FIRE_START ? smax : smax + (b[3] - smax) * clamp01((p - FIRE_START) / FIRE_SPAN);
   return { x, y, hp: Math.max(0, hp), shield, smax, heading, alpha };
+}
+
+/** Adapter from the replay model to the 3D scene's data contract. */
+function sceneSource(w: World, r: BattleReport, rp: Replay): BattleSceneSource {
+  const frameAt = (t: number) => rp.frames[Math.max(0, Math.min(rp.n - 1, Math.floor(t)))];
+  // The defended world (if any) shows up as a backdrop planet.
+  const defender = r.units.find((u) => u.planet);
+  const pid = defender ? w.s.stars[r.star]?.planets.find((p) => w.s.planets[p].owner === defender.owner) : undefined;
+  const planet = pid !== undefined ? w.s.planets[pid] : undefined;
+  return {
+    arenaW: ARENA_W,
+    arenaH: ARENA_H,
+    seed: r.id,
+    sun: w.s.stars[r.star]?.cls ?? null,
+    planet: planet ? { type: planet.type, seed: planet.id } : null,
+    units: r.units.map((u) => {
+      const emp = w.s.empires[u.owner];
+      return { id: u.id, name: u.name, hull: u.hull, planet: !!u.planet, maxHp: u.maxHp, color: emp?.color ?? '#cccccc', style: SPECIES_BY_ID[emp?.species ?? '']?.style ?? 0 };
+    }),
+    shots: rp.shots.map((s) => {
+      const fx = fxOf(s.part);
+      return { from: s.from, to: s.to, dmg: s.dmg, t0: s.t0, t1: s.t1, kind: fx.kind, color: fx.color, width: fx.width };
+    }),
+    deaths: rp.deaths,
+    unitAt: (id, t) => unitAt(rp, id, t),
+    idsAt: (t) => frameAt(t)?.keys() ?? [],
+    posAt: (id, t) => {
+      const s = unitAt(rp, id, t);
+      if (s) return s;
+      const f = frameAt(t)?.get(id);
+      return f ? { x: f[0], y: f[1] } : null;
+    },
+  };
+}
+
+function roundLabel(rp: Replay, t: number) {
+  const k = Math.min(rp.n - 1, Math.floor(t));
+  return k === 0 && t < 0.3 ? 'DEPLOYMENT' : `ROUND ${Math.min(rp.n - 1, Math.floor(t + 1 - FIRE_START))}`;
 }
 
 // --- drawing -----------------------------------------------------------------
@@ -409,7 +448,7 @@ function draw(ctx: CanvasRenderingContext2D, w: World, rp: Replay, t: number, st
   ctx.font = '600 15px "Chakra Petch", Inter, sans-serif';
   ctx.textAlign = 'left';
   ctx.fillStyle = 'rgba(223,230,255,0.55)';
-  ctx.fillText(k === 0 && t < 0.3 ? 'DEPLOYMENT' : `ROUND ${Math.min(rp.n - 1, Math.floor(t + 1 - FIRE_START))}`, 18, 30);
+  ctx.fillText(roundLabel(rp, t), 18, 30);
 }
 
 // --- component ---------------------------------------------------------------
@@ -418,6 +457,7 @@ const BT_CSS = `
 .bt-root { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 300px; }
 .bt-stage { min-width: 0; min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--line); }
 .bt-canvas-wrap { flex: 1; min-height: 0; position: relative; display: flex; align-items: center; justify-content: center; background: #02030a; overflow: hidden; }
+.bt-3d { position: absolute; inset: 0; }
 .bt-canvas-wrap canvas { display: block; border-radius: 6px; box-shadow: 0 0 0 1px var(--line); }
 .bt-controls { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--line); flex-wrap: wrap; }
 .bt-controls input[type=range] { flex: 1; min-width: 120px; accent-color: var(--accent); }
@@ -519,6 +559,35 @@ function BattleView({ w, report }: { w: World; report: BattleReport }) {
     return c && /^#[0-9a-f]{6}$/i.test(c) ? c : null;
   }, [report]);
   const scaleRef = useRef(1);
+  const [mode3d, setMode3d] = useState(() => {
+    try { return localStorage.getItem('ascendant-battle3d') === '1'; } catch { return false; }
+  });
+  const setMode = (on: boolean) => {
+    try { localStorage.setItem('ascendant-battle3d', on ? '1' : '0'); } catch { /* storage unavailable */ }
+    setMode3d(on);
+  };
+  const host3dRef = useRef<HTMLDivElement>(null);
+  const sceneRef = useRef<BattleScene | null>(null);
+
+  // 3D scene lifecycle (three.js is loaded on demand).
+  useEffect(() => {
+    if (!mode3d || !hasReplay) return;
+    let dead = false;
+    void import('../../render3d/BattleScene').then(({ BattleScene }) => {
+      if (dead || !host3dRef.current) return;
+      try {
+        sceneRef.current = new BattleScene(host3dRef.current, sceneSource(w, report, rp));
+      } catch (err) {
+        console.warn('3D battle view unavailable', err);
+        setMode(false);
+      }
+    });
+    return () => {
+      dead = true;
+      sceneRef.current?.dispose();
+      sceneRef.current = null;
+    };
+  }, [mode3d, rp]);
 
   // Size canvas to fit the stage at 3:2.
   useEffect(() => {
@@ -553,8 +622,13 @@ function BattleView({ w, report }: { w: World; report: BattleReport }) {
         tRef.current = Math.min(end + 0.999, tRef.current + (dt / ROUND_MS) * st.speed);
         if (tRef.current >= end + 0.999) { tRef.current = end; setPlaying(false); }
       }
+      const scene = sceneRef.current;
       const cv = canvasRef.current;
-      const ctx = cv?.getContext('2d');
+      if (scene) {
+        const tt = Math.min(tRef.current, end);
+        scene.render(tt, now, { hover: st.hover, highlight: st.highlight, label: roundLabel(rp, tt) });
+      }
+      const ctx = !scene && cv?.offsetParent ? cv.getContext('2d') : null;
       if (cv && ctx) {
         const s = scaleRef.current;
         ctx.setTransform(s, 0, 0, s, 0, 0);
@@ -586,6 +660,12 @@ function BattleView({ w, report }: { w: World; report: BattleReport }) {
   };
   const restart = () => { tRef.current = 0; setTick(0); setPlaying(true); };
   const seek = (v: number) => { tRef.current = v; setTick(Math.floor(v * 4)); };
+
+  const onMove3d = (e: PointerEvent) => {
+    if (e.buttons) return; // dragging the camera
+    const id = sceneRef.current?.pick(e.clientX, e.clientY, Math.min(tRef.current, end)) ?? null;
+    if (id !== hover) setHover(id);
+  };
 
   const onMove = (e: PointerEvent) => {
     const cv = canvasRef.current;
@@ -705,7 +785,8 @@ function BattleView({ w, report }: { w: World; report: BattleReport }) {
           {hasReplay ? (
             <>
               <div class="bt-canvas-wrap" ref={wrapRef}>
-                <canvas ref={canvasRef} onPointerMove={onMove} onPointerLeave={() => setHover(null)} style={{ cursor: hover !== null ? 'crosshair' : 'default' }} />
+                <canvas ref={canvasRef} onPointerMove={onMove} onPointerLeave={() => setHover(null)} style={{ cursor: hover !== null ? 'crosshair' : 'default', display: mode3d ? 'none' : 'block' }} />
+                {mode3d && <div class="bt-3d" ref={host3dRef} onPointerMove={onMove3d} onPointerLeave={() => setHover(null)} />}
               </div>
               <div class="bt-controls">
                 <button class="btn icon" onClick={togglePlay} data-tip={playing ? 'Pause (Space)' : 'Play (Space)'}>{playing ? <Icon.pause /> : <Icon.play />}</button>
@@ -715,6 +796,10 @@ function BattleView({ w, report }: { w: World; report: BattleReport }) {
                 </div>
                 <input type="range" min={0} max={end} step={0.01} value={t}
                   onInput={(e) => { setPlaying(false); seek(parseFloat((e.target as HTMLInputElement).value)); }} />
+                <div class="seg" data-tip="Replay view. In 3D: drag to pan, right-drag to orbit, wheel to zoom">
+                  <button class={!mode3d ? 'on' : ''} onClick={() => setMode(false)}>2D</button>
+                  <button class={mode3d ? 'on' : ''} onClick={() => setMode(true)}>3D</button>
+                </div>
                 <span class="bt-round">{t < FIRE_START && Math.floor(t) === 0 ? 'Deploy' : `Round ${Math.max(1, round)}`} / {end}</span>
               </div>
             </>

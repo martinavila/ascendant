@@ -1,9 +1,8 @@
 import { useState } from 'preact/hooks';
-import { store, useStore } from '../store';
+import { store, useStore, dispatch } from '../store';
 import { Icon, ShipImage, PartIcon } from '../icons';
 import { Bar, Section, act, fmt, Empty } from '../common';
-import { merge, moveFleet, orderColonize, orderInvade, renameFleet, setStance, split, refitFleetTo } from '../../sim/commands';
-import { abilityCheck, useAbility } from '../../sim/abilities';
+import { abilityCheck } from '../../sim/abilities';
 import { invasionDefense, planetDefended } from '../../sim/fleets';
 import { PART } from '../../sim/content';
 import type { Fleet, FleetStance } from '../../sim/types';
@@ -40,7 +39,7 @@ export function FleetPanel({ fleet }: { fleet: Fleet }) {
     store.pick = {
       kind: 'move', hint: `Move ${fleet.name}: click a destination star`, onPick: (s) => {
         store.pick = null;
-        act(moveFleet(w, fleet, s));
+        act(dispatch({ t: 'moveFleet', fleet: fleet.id, dest: s }));
       },
     };
     store.emit();
@@ -75,7 +74,7 @@ export function FleetPanel({ fleet }: { fleet: Fleet }) {
           {name === null ? (
             <h2 style={{ fontSize: 18, cursor: 'text' }} onClick={() => setName(fleet.name)} data-tip="Click to rename">{fleet.name}</h2>
           ) : (
-            <input value={name} autoFocus onInput={(e) => setName((e.target as HTMLInputElement).value)} onBlur={() => { renameFleet(w, fleet, name); setName(null); store.emit(); }} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
+            <input value={name} autoFocus onInput={(e) => setName((e.target as HTMLInputElement).value)} onBlur={() => { if (name !== fleet.name) dispatch({ t: 'renameFleet', fleet: fleet.id, name }); setName(null); store.emit(); }} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
           )}
         </div>
         <div class="small dim" style={{ marginTop: 4 }}>
@@ -85,18 +84,18 @@ export function FleetPanel({ fleet }: { fleet: Fleet }) {
         </div>
         <div class="row wrap" style={{ marginTop: 10, gap: 6 }}>
           <button class="btn sm primary" onClick={pickMove} data-tip="Pick a destination on the map (or right-click a star with this fleet selected)"><Icon.route size={14} /> Move</button>
-          {fleet.route.length > 0 && <button class="btn sm" onClick={() => { fleet.route = fleet.transit > 0 ? [fleet.route[0]] : []; act(); }}>Stop</button>}
-          <button class={'btn sm ' + (fleet.order.kind === 'explore' ? 'active' : '')} onClick={() => { fleet.order = fleet.order.kind === 'explore' ? { kind: 'none' } : { kind: 'explore' }; act(); }} data-tip="Automatically visit the nearest unexplored stars">Auto-explore</button>
+          {fleet.route.length > 0 && <button class="btn sm" onClick={() => act(dispatch({ t: 'stopFleet', fleet: fleet.id }))}>Stop</button>}
+          <button class={'btn sm ' + (fleet.order.kind === 'explore' ? 'active' : '')} onClick={() => act(dispatch({ t: 'fleetOrder', fleet: fleet.id, order: fleet.order.kind === 'explore' ? 'none' : 'explore' }))} data-tip="Automatically visit the nearest unexplored stars">Auto-explore</button>
           {sp.ability.target === 'fleet' && (
             <button class="btn sm" disabled={!!abilityCheck(w, human.id, { fleet: fleet.id, star: fleet.star }) && w.s.day < human.abilityReadyDay} onClick={() => {
-              store.pick = { kind: 'ability', hint: `${sp.ability.name}: choose a destination`, onPick: (s) => { store.pick = null; const err = useAbility(w, human.id, { fleet: fleet.id, star: s }); if (err) store.notify(err, 'error'); store.emit(); } };
+              store.pick = { kind: 'ability', hint: `${sp.ability.name}: choose a destination`, onPick: (s) => { store.pick = null; act(dispatch({ t: 'ability', target: { fleet: fleet.id, star: s } })); } };
               store.emit();
             }} data-tip={sp.ability.desc}><Icon.bolt size={12} /> {sp.ability.name}</button>
           )}
         </div>
         <div style={{ marginTop: 10 }}>
           <div class="seg">
-            {STANCES.map((s) => <button key={s.v} class={fleet.stance === s.v ? 'on' : ''} onClick={() => { setStance(w, fleet, s.v); store.emit(); }} data-tip={s.tip}>{s.label}</button>)}
+            {STANCES.map((s) => <button key={s.v} class={fleet.stance === s.v ? 'on' : ''} onClick={() => act(dispatch({ t: 'stance', fleet: fleet.id, stance: s.v }))} data-tip={s.tip}>{s.label}</button>)}
           </div>
         </div>
       </div>
@@ -113,18 +112,18 @@ export function FleetPanel({ fleet }: { fleet: Fleet }) {
               return (
                 <div key={p.id} class="row small" style={{ padding: '4px 0' }}>
                   <span class="grow ellipsis">{p.name}</span>
-                  {canCol && <button class="btn sm primary" onClick={() => act(orderColonize(w, fleet, p.id), 'Colony founded.')}>Colonize</button>}
-                  {canOut && !canCol && <button class="btn sm" onClick={() => act(orderColonize(w, fleet, p.id, true))}>Outpost</button>}
-                  {canInv && <button class="btn sm danger" disabled={planetDefended(p)} onClick={() => act(orderInvade(w, fleet, p.id))} data-tip={planetDefended(p) ? 'Destroy its orbital defenses first.' : `Troops ${troops} vs defense ${def} (±15%)`}>Invade {troops}/{def}</button>}
+                  {canCol && <button class="btn sm primary" onClick={() => act(dispatch({ t: 'colonize', fleet: fleet.id, planet: p.id }), 'Colony founded.')}>Colonize</button>}
+                  {canOut && !canCol && <button class="btn sm" onClick={() => act(dispatch({ t: 'colonize', fleet: fleet.id, planet: p.id, outpost: true }))}>Outpost</button>}
+                  {canInv && <button class="btn sm danger" disabled={planetDefended(p)} onClick={() => act(dispatch({ t: 'invade', fleet: fleet.id, planet: p.id }))} data-tip={planetDefended(p) ? 'Destroy its orbital defenses first.' : `Troops ${troops} vs defense ${def} (±15%)`}>Invade {troops}/{def}</button>}
                 </div>
               );
             })}
           </Section>
         )}
         {fleet.order.kind !== 'none' && fleet.order.kind !== 'explore' && fleet.order.kind !== 'patrol' && (
-          <div class="section small">Standing order: <b>{fleet.order.kind}</b> {w.s.planets[fleet.order.planet]?.name} <button class="btn sm ghost" onClick={() => { fleet.order = { kind: 'none' }; act(); }}>Cancel</button></div>
+          <div class="section small">Standing order: <b>{fleet.order.kind}</b> {w.s.planets[fleet.order.planet]?.name} <button class="btn sm ghost" onClick={() => act(dispatch({ t: 'fleetOrder', fleet: fleet.id, order: 'none' }))}>Cancel</button></div>
         )}
-        <Section title={`Ships · ${fleet.ships.length}`} right={picked.size > 0 && picked.size < fleet.ships.length && fleet.transit === 0 ? <button class="btn sm" onClick={() => { split(w, fleet, [...picked]); setPicked(new Set()); store.emit(); }}>Split {picked.size}</button> : null}>
+        <Section title={`Ships · ${fleet.ships.length}`} right={picked.size > 0 && picked.size < fleet.ships.length && fleet.transit === 0 ? <button class="btn sm" onClick={() => { act(dispatch({ t: 'split', fleet: fleet.id, ships: [...picked] })); setPicked(new Set()); }}>Split {picked.size}</button> : null}>
           {stats.map(({ ship, st: s }) => {
             const d = w.s.designs[ship.design];
             const newer = d && Object.values(w.s.designs).some((x) => x.owner === human.id && x.role === d.role && x.hull === ship.hull && x.created > d.created && !x.obsolete);
@@ -157,7 +156,7 @@ export function FleetPanel({ fleet }: { fleet: Fleet }) {
           <Section title="Refit at shipyard">
             <div class="dim small" style={{ marginBottom: 6 }}>Refits swap individual components; each ship keeps its name and battle record.</div>
             <div class="row wrap" style={{ gap: 6 }}>
-              {designs.map((d) => <button key={d.id} class="btn sm" onClick={() => act(refitFleetTo(w, fleet, d.id), `Refits queued to match ${d.name}.`)}>→ {d.name}</button>)}
+              {designs.map((d) => <button key={d.id} class="btn sm" onClick={() => act(dispatch({ t: 'refitFleet', fleet: fleet.id, design: d.id }), `Refits queued to match ${d.name}.`)}>→ {d.name}</button>)}
               <button class="btn sm ghost" onClick={() => store.open('designer', { refitFleet: fleet.id })}>Designer…</button>
             </div>
           </Section>
@@ -167,7 +166,7 @@ export function FleetPanel({ fleet }: { fleet: Fleet }) {
             {others.map((f) => (
               <div key={f.id} class="row small" style={{ padding: '3px 0' }}>
                 <span class="grow">{f.name} ({f.ships.length})</span>
-                <button class="btn sm" onClick={() => { merge(w, fleet, f); store.emit(); }}>Merge in</button>
+                <button class="btn sm" onClick={() => act(dispatch({ t: 'merge', into: fleet.id, from: f.id }))}>Merge in</button>
               </div>
             ))}
           </Section>

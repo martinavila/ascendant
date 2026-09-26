@@ -122,7 +122,14 @@ export class World {
     const emp = typeof e === 'number' ? this.s.empires[e] : e;
     return SPECIES_BY_ID[emp.species];
   }
-  human(): Empire | undefined { return this.s.empires.find((e) => e.human); }
+  /**
+   * The local player's empire (UI-only, never serialized, never read by the
+   * simulation). In multiplayer every client sets this to its own seat; in
+   * single-player it stays null and `human()` falls back to the first human.
+   */
+  me: EmpireId | null = null;
+  /** The empire the local player controls (see `me`). */
+  human(): Empire | undefined { return this.me !== null ? this.s.empires[this.me] : this.s.empires.find((e) => e.human); }
 
   knows(e: EmpireId, tech: string | undefined): boolean {
     return !tech || this.knownTech[e].has(tech);
