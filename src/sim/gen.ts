@@ -4,12 +4,13 @@ import type {
   Empire, GameSettings, GameState, Lane, Planet, Relation, ShipDesign, Star, StarClass, Tile, TileColor,
 } from './types';
 import { World } from './world';
+import { refreshTotals } from './economy';
 
 export const SAVE_VERSION = 1;
 
 export const DEFAULT_SETTINGS: GameSettings = {
   seed: 1,
-  stars: 120,
+  stars: 150,
   shape: 'spiral',
   empires: 6,
   playerSpecies: 'zurvani',
@@ -67,6 +68,7 @@ export function newGame(settings: GameSettings): World {
   const w = new World(s);
   placeEmpires(w, rng);
   w.reindex();
+  refreshTotals(w);
   return w;
 }
 

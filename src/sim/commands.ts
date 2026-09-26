@@ -52,7 +52,7 @@ export function moveQueued(w: World, p: Planet, index: number, dir: -1 | 1) {
 
 export function setGovernor(w: World, p: Planet, patch: Partial<Planet['governor']>) {
   Object.assign(p.governor, patch);
-  if (p.governor.on && !p.queue.length) governPlanet(w, p);
+  if (p.governor.on && !p.queue.length) governPlanet(w, p, true);
   w.touch();
 }
 
@@ -75,7 +75,7 @@ export function reoptimize(w: World, p: Planet) {
   let added = 0;
   for (let i = 0; i < 6; i++) {
     const before = p.queue.length;
-    governPlanet(w, p);
+    governPlanet(w, p, true);
     if (p.queue.length === before) break;
     added++;
   }
@@ -105,17 +105,55 @@ export function researchTowards(w: World, e: EmpireId, target: string, append = 
   if (append) {
     r.queue = [...r.queue, ...path.filter((t) => !r.queue.includes(t) && t !== r.current)];
   } else {
-    // Switch immediately: progress carries over (no penalty for changing your mind).
+    // Switch immediately: progress carries over (no penalty for changing your mind),
+    // and whatever we were researching goes back into the queue right after the new path.
+    const prev = r.current && !path.includes(r.current) ? [r.current] : [];
     r.current = path[0];
-    r.queue = [...path.slice(1), ...r.queue.filter((t) => !path.includes(t))];
+    r.queue = [...path.slice(1), ...prev, ...r.queue.filter((t) => !path.includes(t) && !prev.includes(t))];
   }
+  normalizeResearchQueue(w, e);
   w.touch();
+}
+
+/** Keep the queue in prerequisite order (stable otherwise) and drop known/duplicate techs. */
+export function normalizeResearchQueue(w: World, e: EmpireId) {
+  const r = w.s.empires[e].research;
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const pending = r.queue.filter((t) => !w.knows(e, t) && t !== r.current && !seen.has(t) && (seen.add(t), true));
+  const done = new Set<string>([...w.knownTech[e], ...(r.current ? [r.current] : [])]);
+  while (pending.length) {
+    const i = pending.findIndex((t) => TECH[t].prereqs.every((p) => done.has(p) || !pending.includes(p)));
+    const t = pending.splice(i < 0 ? 0 : i, 1)[0];
+    out.push(t);
+    done.add(t);
+  }
+  r.queue = out;
 }
 
 export function dequeueResearch(w: World, e: EmpireId, tech: string) {
   const r = w.s.empires[e].research;
-  r.queue = r.queue.filter((t) => t !== tech);
+  // Removing a tech also removes queued techs that depend on it.
+  const drop = new Set([tech]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const t of r.queue) if (!drop.has(t) && TECH[t].prereqs.some((p) => drop.has(p))) { drop.add(t); grew = true; }
+  }
+  r.queue = r.queue.filter((t) => !drop.has(t));
   w.touch();
+}
+
+/** Move a queued tech up/down without breaking prerequisite order. Returns false if blocked. */
+export function moveResearch(w: World, e: EmpireId, index: number, dir: -1 | 1): boolean {
+  const q = w.s.empires[e].research.queue;
+  const j = index + dir;
+  if (j < 0 || j >= q.length) return false;
+  const [a, b] = dir < 0 ? [q[j], q[index]] : [q[index], q[j]];
+  if (TECH[b].prereqs.includes(a)) return false;
+  [q[index], q[j]] = [q[j], q[index]];
+  w.touch();
+  return true;
 }
 
 // --- fleets ------------------------------------------------------------------
@@ -219,12 +257,14 @@ export function setObsolete(w: World, d: ShipDesign, obsolete: boolean) {
 export function refitFleetTo(w: World, f: Fleet, designId: number): Result {
   const s = w.s;
   const d = s.designs[designId];
+  if (!d || d.owner !== f.owner) return fail('Unknown design.');
   const yard = w.planetsOf[f.owner].map((id) => s.planets[id]).find((p) => p.star === f.star && w.econ(p).hasShipyard);
   if (!yard) return fail('The fleet must be at one of your shipyards.');
-  let n = 0;
+  let n = 0, matched = 0;
   for (const id of f.ships) {
     const sh = s.ships[id];
     if (sh.hull !== d.hull) continue;
+    matched++;
     d.parts.forEach((part, slot) => {
       if (part && sh.parts[slot] !== part && w.knows(f.owner, PART[part].tech)) {
         yard.queue.push({ kind: 'refit', ship: id, slot, part });
@@ -234,7 +274,8 @@ export function refitFleetTo(w: World, f: Fleet, designId: number): Result {
     sh.design = d.id;
   }
   w.touch();
-  return n ? ok : fail('Nothing to refit (hulls must match the design).');
+  if (!matched) return fail(`No ship in this fleet has a ${d.hull} hull like ${d.name}.`);
+  return n ? ok : fail('Every matching ship already fits this design.');
 }
 
 export function refitShipPart(w: World, shipId: number, slot: number, part: string): Result {

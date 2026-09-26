@@ -9,7 +9,7 @@ export const SPEED_UNIT = 16;
 export const MAX_EVENTS = 600;
 export const MAX_BATTLES = 40;
 export const AUTO_EFFICIENCY = 0.75;
-export const ASCENSION_COST = 150000;
+export const ASCENSION_COST = 200000;
 
 export interface ShipStats {
   hp: number;

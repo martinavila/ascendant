@@ -5,7 +5,7 @@ import { combatTick } from './combat';
 import { diplomacyTick } from './diplomacy';
 import { visibilityTick } from './visibility';
 import { victoryTick, statsTick } from './victory';
-import { aiTick } from './ai';
+import { aiTick, humanAutomation } from './ai';
 
 /** Advance the galaxy by one day. Pure simulation: no DOM, deterministic given the state. */
 export function advanceDay(w: World) {
@@ -20,7 +20,7 @@ export function advanceDay(w: World) {
   repairTick(w);
   visibilityTick(w);
   diplomacyTick(w);
-  for (const e of s.empires) if (!e.human && e.alive) aiTick(w, e);
+  for (const e of s.empires) if (e.alive) e.human ? humanAutomation(w, e) : aiTick(w, e);
   w.reindex();
   victoryTick(w);
   statsTick(w);

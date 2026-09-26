@@ -211,6 +211,8 @@ export interface Planet {
   besieged?: number;
   /** Extra invasion defense built up by the Fortify project. */
   militia?: number;
+  /** Governor back-off: skip re-planning until this day unless pop/tech changes (key). */
+  govRest?: { until: number; key: number };
   foundedDay?: number;
   /** Owner empire before conquest, used for unrest/AI memory. */
   prevOwner?: EmpireId;
@@ -284,7 +286,7 @@ export interface Relation {
   stance: Stance;
   mods: OpinionMod[];
   since: number;
-  /** Days of continuous alliance (diplomatic victory). */
+  /** Day this empire last proposed something to the other (AI cooldown). */
   lastProposal?: number;
 }
 

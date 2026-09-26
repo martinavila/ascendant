@@ -24,8 +24,22 @@ export function aiTick(w: World, e: Empire) {
   if (abilityReady(w, e.id)) tryAbility(w, e);
 }
 
-/** Human "autopilot" helpers reuse parts of the AI. */
-export { manageFleets as aiManageFleets };
+/** Human automation: fleets on "auto-explore" pick the nearest unexplored star. */
+export function humanAutomation(w: World, e: Empire) {
+  const taken = new Set<StarId>();
+  for (const f of Object.values(w.s.fleets)) {
+    if (f.owner !== e.id || f.order.kind !== 'explore') continue;
+    if (f.route.length) { taken.add(f.route[f.route.length - 1]); continue; }
+    const t = nearestUnexplored(w, e, f, taken);
+    if (t === null) {
+      f.order = { kind: 'none' };
+      w.event(e.id, 'idle', `${f.name} has nothing left to explore nearby.`, { fleet: f.id, star: f.star });
+      continue;
+    }
+    taken.add(t);
+    orderMove(w, f, t);
+  }
+}
 
 // --- planets ---------------------------------------------------------------
 

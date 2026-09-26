@@ -39,8 +39,8 @@ def decode_image(d, off):
                 x += 1
     return w, h, px
 
-def bank(path):
-    d = open(path, 'rb').read()
+def bank(path_or_bytes):
+    d = path_or_bytes if isinstance(path_or_bytes, (bytes, bytearray)) else open(path_or_bytes, 'rb').read()
     if d[:4] != b'1.10': raise ValueError('not a shp bank')
     n = struct.unpack_from('<I', d, 4)[0]
     out = []

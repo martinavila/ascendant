@@ -51,7 +51,13 @@ function workerStats(w: World, p: Planet) {
   const ec = w.econ(p);
   const queuedWorkers = p.queue.filter((q) => q.kind === 'building' && BUILDING[q.id].needsWorker && !q.replace).length;
   const selfmod = w.knows(p.owner!, 'selfmod');
-  return { ec, free: p.pop - ec.workersNeeded - queuedWorkers, selfmod };
+  return {
+    ec,
+    free: p.pop - ec.workersNeeded - queuedWorkers,
+    /** Workers this planet could ever supply beyond current demand. */
+    staffable: ec.popMax - ec.workersNeeded - queuedWorkers,
+    selfmod,
+  };
 }
 
 type Weights = { ind: number; res: number; pro: number; def: number };
@@ -60,7 +66,8 @@ function valueOf(p: Planet, def: BuildingDef, color: TileColor, W: Weights, focu
   const m = tileMul(color);
   const ec = ctx.ec;
   const room = ec.popMax - p.pop;
-  const proUseful = p.pop === 0 ? 0 : room > 0 ? 1 + Math.min(1, room / 6) : 0.15;
+  // Prosperity only matters while there's room to grow, with diminishing returns.
+  const proUseful = p.pop === 0 ? 0 : room > 0 ? (1 + Math.min(1, room / 6)) / (1 + ec.yield.pro / 8) : 0.15;
   let v = W.ind * def.yield.ind * m.ind + W.res * def.yield.res * m.res + W.pro * def.yield.pro * m.pro * proUseful;
   let why = '';
   if (m.ind > 1 && def.yield.ind) why = 'on an industry (red) tile';
@@ -81,8 +88,9 @@ function valueOf(p: Planet, def: BuildingDef, color: TileColor, W: Weights, focu
     why = 'planet-wide bonus';
   }
   if (def.needsWorker && !ctx.selfmod && ctx.free <= 0) {
-    v *= room > 0 ? 0.4 : 0.08;
-    why += (why ? '; ' : '') + 'will idle until population grows';
+    // Only worth it if population growth will eventually staff it.
+    v *= ctx.staffable > 0 && room > 0 ? 0.4 : 0.03;
+    why += (why ? '; ' : '') + (ctx.staffable > 0 ? 'will idle until population grows' : 'no workers to staff it');
   }
   if (def.role === 'defense') {
     const d = def.defense;
@@ -154,12 +162,17 @@ export function governorCandidates(w: World, p: Planet): Candidate[] {
     p.tiles.forEach((t, i) => {
       if (!t.b || w.tileQueued(p, i, false) || t.b.id === 'colonybase' || t.b.id === 'excavation') return;
       const cur = BUILDING[t.b.id];
-      const curV = valueOf(p, cur, t.c, W, focus, { ...ctx, free: 1 }, threat).v;
+      const curV = valueOf(p, cur, t.c, W, focus, { ...ctx, free: 1, staffable: 1 }, threat).v;
       for (const b of surface) {
         if (b.id === cur.id || b.unique) continue;
-        const nv = valueOf(p, b, t.c, W, focus, { ...ctx, free: 1 }, threat).v;
+        // Never tear down housing for something that houses fewer people: that
+        // shrinks the population cap and starts a rebuild loop.
+        if (cur.housing > b.housing) continue;
+        // Swapping a worker-free structure for one that needs a worker adds demand.
+        const addsWorker = b.needsWorker && !(cur.needsWorker && !t.b.auto);
+        const nv = valueOf(p, b, t.c, W, focus, addsWorker ? ctx : { ...ctx, free: 1, staffable: 1 }, threat).v;
         const gain = nv - curV;
-        if (gain < 1.2) continue;
+        if (gain < Math.max(1.2, curV * 0.4)) continue;
         const upgrade = b.upgrades === cur.id;
         const score = scoreOf(gain, w.buildingCost(owner, b.id)) * (upgrade ? 1 : 0.7) * (emptyTiles ? 0.5 : 1);
         out.push({ item: { kind: 'building', id: b.id, tile: i, replace: true }, score, why: upgrade ? `upgrade ${cur.name}` : `${cur.name} is on the wrong tile` });
@@ -198,7 +211,7 @@ export function governorCandidates(w: World, p: Planet): Candidate[] {
       // Only automate structures that are idle for lack of workers.
       if (!t.b || t.b.auto || !idle.has(i) || !BUILDING[t.b.id].needsWorker || p.queue.some((q) => q.kind === 'automate' && q.tile === i)) return;
       const def = BUILDING[t.b.id];
-      const { v } = valueOf(p, def, t.c, W, focus, { ...ctx, free: 1 }, threat);
+      const { v } = valueOf(p, def, t.c, W, focus, { ...ctx, free: 1, staffable: 1 }, threat);
       out.push({ item: { kind: 'automate', tile: i }, score: scoreOf(v * 0.75, w.buildingCost(owner, def.id)), why: 'idle for lack of workers' });
     });
   }
@@ -213,16 +226,25 @@ export function governorCandidates(w: World, p: Planet): Candidate[] {
   return out;
 }
 
-/** Queue the single best item, or pick a project if nothing is worth building. */
-export function governPlanet(w: World, p: Planet) {
+/**
+ * Queue the single best item, or pick a project if nothing is worth building.
+ * When there's nothing to do the governor rests for a while instead of
+ * re-scoring every tile daily (a big win for fully built late-game empires).
+ * The rest state lives on the planet so saves replay identically.
+ */
+export function governPlanet(w: World, p: Planet, force = false) {
   if (p.owner === null) return;
+  const key = p.pop * 1000 + w.knownTech[p.owner].size;
+  if (!force && p.govRest && p.govRest.until > w.s.day && p.govRest.key === key) return;
   const cands = governorCandidates(w, p);
   const best = cands[0];
   if (best && best.score > 0.03) {
     p.queue.push(best.item);
+    delete p.govRest;
     return;
   }
   p.project = pickProject(w, p);
+  p.govRest = { until: w.s.day + 15, key };
 }
 
 export function pickProject(w: World, p: Planet): string {

@@ -100,6 +100,17 @@ export function economyTick(w: World) {
   for (const e of s.empires) if (e.alive) researchTick(w, e, resTotals[e.id]);
 }
 
+/** Fill `Empire.last` without advancing time (new games, loads). */
+export function refreshTotals(w: World) {
+  for (const e of w.s.empires) e.last = { ind: 0, res: 0, pro: 0, pop: 0, logisticsIn: 0 };
+  for (const p of w.s.planets) {
+    if (p.owner === null) continue;
+    const y = w.econ(p).yield;
+    const l = w.s.empires[p.owner].last;
+    l.ind += y.ind; l.res += y.res; l.pro += y.pro; l.pop += p.pop;
+  }
+}
+
 export function addMod(e: Empire, about: EmpireId, reason: string, value: number, opts: { until?: number; decay?: number } = {}) {
   const r = e.relations[about];
   const existing = r.mods.find((m) => m.reason === reason);
