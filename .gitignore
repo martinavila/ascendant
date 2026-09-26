@@ -1,0 +1,8 @@
+node_modules/
+dist/
+# Original game files and anything derived from them stay local (copyrighted).
+ascendancy/
+ascendancy.zip
+extracted/
+public/classic/
+.DS_Store

@@ -1,0 +1,28 @@
+{
+  "name": "ascendant",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "A modern, scalable web 4X built on the Ascendancy (1995) framework.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "sim": "vite-node scripts/headless.ts",
+    "import-classic": "python3 tools/import_classic.py"
+  },
+  "dependencies": {
+    "pixi.js": "^8.21.0",
+    "preact": "^10.29.8"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.10.6",
+    "@types/node": "^26.6.3",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.1",
+    "vite-node": "^6.0.0",
+    "vitest": "^5.0.2"
+  }
+}
