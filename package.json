@@ -14,12 +14,15 @@
     "import-classic": "python3 tools/import_classic.py"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.117.2",
     "pixi.js": "^8.21.0",
-    "preact": "^10.29.8"
+    "preact": "^10.29.8",
+    "three": "^0.186.1"
   },
   "devDependencies": {
     "@preact/preset-vite": "^2.10.6",
     "@types/node": "^26.6.3",
+    "@types/three": "^0.186.0",
     "typescript": "^5.9.3",
     "vite": "^8.3.1",
     "vite-node": "^6.0.0",

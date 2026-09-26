@@ -383,3 +383,47 @@ export function sigilUrl(id: string, color: string, size = 128) {
   if (!u) sigilUrls.set(key, (u = sigilCanvas(id, color, size).toDataURL()));
   return u;
 }
+
+/**
+ * Equirectangular surface texture (for 3D globes) using the same palettes as
+ * the 2D planet sprites. Returns the color map and the atmosphere color.
+ */
+export function planetEquirect(type: string, seed: number, width = 512): { canvas: HTMLCanvasElement; atmo: string } {
+  const key = `eq:${type}:${seed}:${width}`;
+  const pal = PALETTES[PLANET_TYPE[type]?.palette ?? 'rock'];
+  const hit = cache.get(key);
+  if (hit) return { canvas: hit, atmo: pal.atmo };
+  const W = width, H = width / 2;
+  const c = mkCanvas(W, H);
+  const ctx = c.getContext('2d')!;
+  const img = ctx.createImageData(W, H);
+  const s = pal.scale;
+  for (let y = 0; y < H; y++) {
+    const lat = (y / H) * Math.PI;
+    const sl = Math.sin(lat), cl = Math.cos(lat);
+    for (let x = 0; x < W; x++) {
+      const lon = (x / W) * Math.PI * 2;
+      const dx = sl * Math.cos(lon), dz = sl * Math.sin(lon), dy = cl;
+      let n: number;
+      if (pal.bands) {
+        const turb = fbm(dx * 2, dy * 6, dz * 2, seed, 4);
+        n = 0.5 + 0.5 * Math.sin(dy * 9 + turb * 5 + (seed % 7));
+        n = n * 0.7 + fbm(dx * 4, dy * 12, dz * 4, seed + 5, 3) * 0.3;
+      } else {
+        n = fbm(dx * s + 10, dy * s + 10, dz * s + 10, seed);
+        n = Math.pow(n, 1.1) * 1.15 - 0.05;
+      }
+      let col = ramp(pal.stops, n);
+      if (pal.clouds) {
+        const cl2 = fbm(dx * 3 + 40, dy * 5 + 40, dz * 3 + 40, seed + 99, 4);
+        const k = Math.max(0, (cl2 - (1 - pal.clouds)) / pal.clouds) * 0.85;
+        col = [col[0] + (255 - col[0]) * k, col[1] + (255 - col[1]) * k, col[2] + (255 - col[2]) * k];
+      }
+      const i = (y * W + x) * 4;
+      img.data[i] = col[0]; img.data[i + 1] = col[1]; img.data[i + 2] = col[2]; img.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  cache.set(key, c);
+  return { canvas: c, atmo: pal.atmo };
+}
