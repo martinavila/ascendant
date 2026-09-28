@@ -28,10 +28,11 @@ export class SupabaseTransport implements Transport {
   private msgs = new Emitter<Envelope>();
   private pres = new Emitter<PeerMeta[]>();
 
-  constructor(readonly self: PeerMeta) {}
+  /** `client` lets tests run two players in one process (each needs its own socket). */
+  constructor(readonly self: PeerMeta, private client?: SupabaseClient) {}
 
   join(room: string): Promise<void> {
-    const sb = getClient();
+    const sb = this.client ?? getClient();
     const ch = sb.channel('ascendant:' + room, {
       config: { broadcast: { self: false, ack: false }, presence: { key: this.self.id, enabled: true } },
     });
@@ -77,7 +78,7 @@ export class SupabaseTransport implements Transport {
     this.ch = null;
     if (ch) {
       void ch.untrack().catch(() => {});
-      void getClient().removeChannel(ch);
+      void (this.client ?? getClient()).removeChannel(ch);
     }
     this.msgs.clear();
     this.pres.clear();

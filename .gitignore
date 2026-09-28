@@ -6,3 +6,6 @@ ascendancy.zip
 extracted/
 public/classic/
 .DS_Store
+.env
+.env.local
+.env.*.local

@@ -1,0 +1,19 @@
+# DigitalOcean App Platform spec (static site). Supabase values are public
+# client keys (Realtime only, no tables) and are injected at build time.
+name: ascendant
+region: nyc
+static_sites:
+  - name: web
+    git:
+      repo_clone_url: https://github.com/martinavila/ascendant.git
+      branch: main
+    build_command: npm ci && npm run build
+    output_dir: dist
+    catchall_document: index.html
+    envs:
+      - key: VITE_SUPABASE_URL
+        scope: BUILD_TIME
+        value: https://bpagxqczdedtcqyghkjv.supabase.co
+      - key: VITE_SUPABASE_ANON_KEY
+        scope: BUILD_TIME
+        value: sb_publishable_fSOO2N-KbHPHXCZwgeNhng_YdS60-m0
