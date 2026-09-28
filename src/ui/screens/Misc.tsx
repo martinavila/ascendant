@@ -30,8 +30,8 @@ export function SettingsScreen() {
           <label class="row small" style={{ marginTop: 10 }}>Autosave every <input type="number" min={0} step={10} value={s.autosaveEvery} style={{ width: 70 }} onInput={(e) => { s.autosaveEvery = +(e.target as HTMLInputElement).value; upd(); }} /> days (0 = off)</label>
         </Section>
         <Section title="Graphics">
-          <label class="row small"><input type="checkbox" disabled={!classicAvailable()} checked={s.classicArt && classicAvailable()} onChange={(e) => { s.classicArt = (e.target as HTMLInputElement).checked; setClassicEnabled(s.classicArt); upd(); }} />Use classic art (upscaled from your copy of the original)</label>
-          {!classicAvailable() && <div class="small dim" style={{ marginTop: 6 }}>Not found. If you own Ascendancy, put its files in <span class="kbd">./ascendancy</span> and run <span class="kbd">npm run import-classic</span>. The art stays on your machine.</div>}
+          {(import.meta.env.DEV || classicAvailable()) && <label class="row small"><input type="checkbox" disabled={!classicAvailable()} checked={s.classicArt && classicAvailable()} onChange={(e) => { s.classicArt = (e.target as HTMLInputElement).checked; setClassicEnabled(s.classicArt); upd(); }} />Use classic art (upscaled from your copy of the original)</label>}
+          {import.meta.env.DEV && !classicAvailable() && <div class="small dim" style={{ marginTop: 6 }}>Not found. If you own Ascendancy, put its files in <span class="kbd">./ascendancy</span> and run <span class="kbd">npm run import-classic</span>. The art stays on your machine.</div>}
           <label class="row small" style={{ marginTop: 8 }}><input type="checkbox" checked={s.showLabels} onChange={(e) => { s.showLabels = (e.target as HTMLInputElement).checked; upd(); }} />Show star names on the map</label>
         </Section>
       </div>

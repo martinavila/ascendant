@@ -92,11 +92,11 @@ export function MainMenu({ onNew, onMultiplayer }: { onNew: () => void; onMultip
             ))}
           </div>
         )}
-        <div class="small dim" style={{ textAlign: 'center', marginTop: 30, lineHeight: 1.6 }}>
+        {(import.meta.env.DEV || classicAvailable()) && <div class="small dim" style={{ textAlign: 'center', marginTop: 30, lineHeight: 1.6 }}>
           {classicAvailable()
             ? <>Classic art detected — upscaled from your copy of Ascendancy. Toggle it in Settings.</>
             : <>Using procedural art. Own the original? Run <span class="kbd">npm run import-classic</span> to upscale its art for local play.</>}
-        </div>
+        </div>}
       </div>
     </div>
   );
