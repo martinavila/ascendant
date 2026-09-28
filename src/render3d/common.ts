@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { planetEquirect, STAR_COLORS } from '../art/procedural';
 import type { StarClass } from '../sim/types';
+import { lowPower, renderPixelRatio } from '../render/device';
 
 // --- renderer -------------------------------------------------------------------
 
@@ -22,8 +23,10 @@ export interface Stage {
 }
 
 export function createStage(host: HTMLElement, opts: { fov?: number; near?: number; far?: number; background?: number } = {}): Stage {
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  const low = lowPower();
+  // Mobile GPUs: skip MSAA (the capped pixel ratio already smooths edges) and render at <= 1.5x.
+  const renderer = new THREE.WebGLRenderer({ antialias: !low, alpha: false, powerPreference: low ? 'default' : 'high-performance' });
+  renderer.setPixelRatio(renderPixelRatio());
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.1;
@@ -65,6 +68,7 @@ export function createStage(host: HTMLElement, opts: { fov?: number; near?: numb
 
 /** Distant starfield sphere. */
 export function starfield(count = 2500, radius = 1500) {
+  if (lowPower()) count = Math.round(count * 0.4);
   const g = new THREE.BufferGeometry();
   const pos = new Float32Array(count * 3);
   const col = new Float32Array(count * 3);
@@ -287,12 +291,17 @@ export class OrbitRig {
   minDist = 2;
   maxDist = 4000;
   private drag: { x: number; y: number; button: number } | null = null;
+  /** Active touch/pen pointers (multi-touch: pinch zoom, twist orbit, two-finger tilt). */
+  private touches = new Map<number, { x: number; y: number }>();
+  private pinch: { d: number; a: number; my: number } | null = null;
   moved = 0;
 
   constructor(private camera: THREE.PerspectiveCamera, private el: HTMLElement) {
+    el.style.touchAction = 'none';
     el.addEventListener('pointerdown', this.down);
     window.addEventListener('pointermove', this.move);
     window.addEventListener('pointerup', this.up);
+    window.addEventListener('pointercancel', this.up);
     el.addEventListener('wheel', this.wheel, { passive: false });
     el.addEventListener('contextmenu', (e) => e.preventDefault());
     this.update();
@@ -302,15 +311,44 @@ export class OrbitRig {
     this.el.removeEventListener('pointerdown', this.down);
     window.removeEventListener('pointermove', this.move);
     window.removeEventListener('pointerup', this.up);
+    window.removeEventListener('pointercancel', this.up);
     this.el.removeEventListener('wheel', this.wheel);
   }
 
+  private startPinch() {
+    const [a, b] = [...this.touches.values()];
+    this.pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), a: Math.atan2(b.y - a.y, b.x - a.x), my: (a.y + b.y) / 2 };
+  }
+
   private down = (e: PointerEvent) => {
+    if (e.pointerType !== 'mouse') {
+      this.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (this.touches.size === 2) { this.startPinch(); this.drag = null; this.moved += 10; return; }
+      if (this.touches.size > 2) return;
+    }
     this.drag = { x: e.clientX, y: e.clientY, button: e.button };
     this.moved = 0;
   };
 
   private move = (e: PointerEvent) => {
+    if (this.touches.has(e.pointerId)) {
+      this.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (this.touches.size === 2 && this.pinch) {
+        const [a, b] = [...this.touches.values()];
+        const d = Math.hypot(a.x - b.x, a.y - b.y), ang = Math.atan2(b.y - a.y, b.x - a.x), my = (a.y + b.y) / 2;
+        const p = this.pinch;
+        if (p.d > 0) this.dist = Math.max(this.minDist, Math.min(this.maxDist, this.dist * (p.d / Math.max(1, d))));
+        let da = ang - p.a;
+        if (da > Math.PI) da -= Math.PI * 2;
+        if (da < -Math.PI) da += Math.PI * 2;
+        this.yaw -= da;
+        this.pitch = Math.max(this.minPitch, Math.min(this.maxPitch, this.pitch + (my - p.my) * 0.005));
+        this.pinch = { d, a: ang, my };
+        this.moved += 10;
+        this.update();
+        return;
+      }
+    }
     if (!this.drag) return;
     const dx = e.clientX - this.drag.x, dy = e.clientY - this.drag.y;
     this.drag.x = e.clientX;
@@ -329,7 +367,17 @@ export class OrbitRig {
     this.update();
   };
 
-  private up = () => {
+  private up = (e: PointerEvent) => {
+    if (this.touches.delete(e.pointerId)) {
+      this.pinch = null;
+      if (this.touches.size === 2) this.startPinch();
+      if (this.touches.size === 1) {
+        // Continue panning with the remaining finger.
+        const [t] = [...this.touches.values()];
+        this.drag = { x: t.x, y: t.y, button: 0 };
+        return;
+      }
+    }
     this.drag = null;
   };
 

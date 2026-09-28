@@ -9,6 +9,7 @@ import type { BuildItem, GovernorFocus, Planet } from '../../sim/types';
 import { planetImage } from '../icons';
 import { invasionDefense } from '../../sim/fleets';
 import { PlanetGlobe } from './PlanetGlobe';
+import { useCompact } from '../mobile';
 
 const FOCI: GovernorFocus[] = ['balanced', 'industry', 'research', 'growth', 'defense'];
 const FOCUS_TIP: Record<GovernorFocus, string> = {
@@ -50,6 +51,8 @@ export function PlanetScreen({ planetId, onClose }: { planetId: number; onClose:
   const [brush, setBrush] = useState<string | null>(null);
   const [selTile, setSelTile] = useState<{ i: number; orbital: boolean } | null>(null);
   const painting = useRef(false);
+  const lastPointer = useRef('mouse');
+  const compact = useCompact();
   const [surfaceView, setSurfaceView] = useState<'grid' | 'globe'>('grid');
   const pt = PLANET_TYPE[p.type];
   const myPlanets = w.planetsOf[human.id];
@@ -97,7 +100,9 @@ export function PlanetScreen({ planetId, onClose }: { planetId: number; onClose:
   };
 
   const cols = p.gridW;
-  const tileSize = Math.max(38, Math.min(72, Math.floor(430 / cols)));
+  // Fit the grid to the screen on phones (16px padding each side, 4px gaps).
+  const availW = Math.min(430, window.innerWidth - 32, window.innerHeight < 500 ? window.innerWidth - 380 : Infinity);
+  const tileSize = Math.max(26, Math.min(72, Math.floor((availW - 4 * (cols - 1)) / cols)));
   const growthPct = ec.growthNeeded ? Math.round((p.growth / ec.growthNeeded) * 100) : 0;
   const head = p.queue[0];
   const headCost = head ? w.itemCost(p, head) : 0;
@@ -108,18 +113,18 @@ export function PlanetScreen({ planetId, onClose }: { planetId: number; onClose:
 
   return (
     <div class="overlay" style={{ background: 'rgba(2,3,8,0.55)', padding: '76px 16px 16px' }} onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div class="panel modal" style={{ width: 'min(1180px, 100%)', height: '100%' }}>
-        <div class="modal-head" style={{ gap: 14 }}>
-          <div style={{ position: 'relative', width: 64, height: 64 }}>
+      <div class="panel modal planet-modal" style={{ width: 'min(1180px, 100%)', height: '100%' }}>
+        <div class="modal-head planet-head" style={{ gap: 14 }}>
+          <div class="planet-pic" style={{ position: 'relative', width: 64, height: 64 }}>
             <img src={planetImage(p, 256)} width={64} height={64} style={{ objectFit: 'contain' }} />
           </div>
-          <div class="col" style={{ gap: 2 }}>
+          <div class="col planet-title" style={{ gap: 2 }}>
             <div class="row"><h2>{p.name}</h2>{owner && <span class="chip" style={{ borderColor: owner.color }}><span class="dot" style={{ background: owner.color }} />{owner.name}</span>}</div>
             <div class="dim small">{SIZE_NAME[p.size]} {pt.name} · {pt.desc}{owner && w.isFavored(p, owner.id) ? <span class="good"> · favored by the {w.species(owner).plural}</span> : ''}</div>
           </div>
           <div class="spacer" />
           {mine && (
-            <div class="row" style={{ gap: 18 }}>
+            <div class="row planet-stats" style={{ gap: 18 }}>
               <div class="col" style={{ gap: 3, minWidth: 130 }} data-tip={`Population ${p.pop} of ${ec.popMax}. Each non-automated structure needs one worker.\nGrowth ${fmt(p.growth)}/${ec.growthNeeded} (+${fmt(ec.yield.pro, 1)}/day from prosperity)`}>
                 <span class="row small">{Icon.pop({ size: 14 })}<b>{p.pop}</b><span class="dim">/ {ec.popMax}</span><span class="spacer" /><span class="dim tiny">{p.pop >= ec.popMax ? 'full' : `${growthPct}%`}</span></span>
                 <Bar value={p.growth} max={ec.growthNeeded} color="var(--pro)" />
@@ -127,17 +132,17 @@ export function PlanetScreen({ planetId, onClose }: { planetId: number; onClose:
               <Yields ind={ind} res={ec.yield.res} pro={ec.yield.pro} size={16} />
             </div>
           )}
-          <div class="row" style={{ gap: 4 }}>
+          <div class="row planet-nav" style={{ gap: 4 }}>
             {mine && myPlanets.length > 1 && <><button class="btn icon sm" onClick={() => cycle(-1)} data-tip="Previous planet ([)"><Icon.up style={{ transform: 'rotate(-90deg)' }} /></button><button class="btn icon sm" onClick={() => cycle(1)} data-tip="Next planet (])"><Icon.down style={{ transform: 'rotate(-90deg)' }} /></button></>}
-            <button class="btn icon ghost" onClick={onClose} data-tip="Close (Esc)"><Icon.close /></button>
+            <button class="btn icon ghost modal-close" onClick={onClose} data-tip="Close (Esc)" aria-label="Close"><Icon.close /></button>
           </div>
         </div>
-        <div class="modal-body" style={{ flexWrap: 'wrap', overflow: 'auto' }}>
+        <div class="modal-body planet-body" style={{ flexWrap: 'wrap', overflow: 'auto' }}>
           {/* Surface */}
-          <div class="col" style={{ padding: 16, gap: 12, flex: '1 1 460px', minWidth: 0 }}>
+          <div class="col planet-surface" style={{ padding: 16, gap: 12, flex: '1 1 460px', minWidth: 0 }}>
             {!explored ? <Empty>This planet hasn't been surveyed.</Empty> : (
               <>
-                <div class="row small dim" style={{ gap: 12 }}>
+                <div class="row small dim wrap" style={{ gap: 12 }}>
                   <span class="caps">Surface</span>
                   <span class="row" style={{ gap: 4 }}><i class="dot" style={{ background: '#b0473a' }} /> industry ×2</span>
                   <span class="row" style={{ gap: 4 }}><i class="dot" style={{ background: '#3464b8' }} /> research ×2</span>
@@ -147,13 +152,13 @@ export function PlanetScreen({ planetId, onClose }: { planetId: number; onClose:
                     <button class={surfaceView === 'globe' ? 'on' : ''} onClick={() => setSurfaceView('globe')} data-tip="3D globe view of the surface">Globe</button>
                     <button class={surfaceView === 'grid' ? 'on' : ''} onClick={() => setSurfaceView('grid')} data-tip="Flat tile grid">Grid</button>
                   </div>
-                  {brush && <span class="chip warn">Placing {BUILDING[brush].name} — click or drag across tiles · Esc to stop</span>}
+                  {brush && <span class="chip warn" style={{ whiteSpace: 'normal' }}>Placing {BUILDING[brush].name} — tap or drag across tiles <button class="btn sm ghost" style={{ minHeight: 0, padding: '0 6px' }} onClick={() => setBrush(null)}>Stop</button></span>}
                 </div>
                 {surfaceView === 'globe' ? (
                   <PlanetGlobe planetId={p.id} selectedTile={selTile && !selTile.orbital ? selTile.i : null} height={Math.max(320, Math.min(520, tileSize * p.gridH + 40))}
                     onTile={(i) => { const t = p.tiles[i]; if (t.c === 'black' && !(mine && w.knows(human.id, 'terraforming'))) return; place(i, false); }} />
                 ) : (
-                <div class="surface" style={{ gridTemplateColumns: `repeat(${cols}, ${tileSize}px)`, userSelect: 'none', touchAction: 'none' }}>
+                <div class="surface" style={{ gridTemplateColumns: `repeat(${cols}, ${tileSize}px)`, userSelect: 'none', touchAction: 'manipulation' }}>
                   {p.tiles.map((t, i) => {
                     const q = queuedAt.get('t' + i);
                     const idle = ec.idle.has(i);
@@ -170,8 +175,19 @@ export function PlanetScreen({ planetId, onClose }: { planetId: number; onClose:
                       <div key={i}
                         class={`tile ${t.c} ${idle ? 'idle' : ''} ${q ? 'queued' : ''} ${suggTiles.has(i) && !t.b && !q && mine ? 'suggest' : ''} ${selTile && !selTile.orbital && selTile.i === i ? 'selected' : ''}`}
                         data-tip={tip}
-                        onPointerDown={(e) => { if (t.c === 'black' && !(mine && w.knows(human.id, 'terraforming'))) return; e.preventDefault(); painting.current = true; place(i, false); }}
-                        onPointerEnter={() => { if (painting.current && brush && t.c !== 'black' && !t.b) place(i, false); }}
+                        onPointerDown={(e) => {
+                          lastPointer.current = e.pointerType;
+                          // Touch: act on tap (click) so scrolling over the grid doesn't select tiles.
+                          if (e.pointerType !== 'mouse') return;
+                          if (t.c === 'black' && !(mine && w.knows(human.id, 'terraforming'))) return;
+                          e.preventDefault(); painting.current = true; place(i, false);
+                        }}
+                        onClick={() => {
+                          if (lastPointer.current === 'mouse') return;
+                          if (t.c === 'black' && !(mine && w.knows(human.id, 'terraforming'))) return;
+                          place(i, false);
+                        }}
+                        onPointerEnter={(e) => { if (e.pointerType === 'mouse' && painting.current && brush && t.c !== 'black' && !t.b) place(i, false); }}
                       >
                         {t.b && <BuildingIcon id={t.b.id} size={tileSize} />}
                         {t.b?.auto && <span class="badge auto" data-tip="Automated structure (gear): works without a worker at 75%"><Icon.gear size={11} /></span>}
@@ -189,9 +205,10 @@ export function PlanetScreen({ planetId, onClose }: { planetId: number; onClose:
                     const q = queuedAt.get('o' + i);
                     const def = o ? BUILDING[o.id] : null;
                     return (
-                      <div key={i} class={`tile white ${q ? 'queued' : ''} ${selTile?.orbital && selTile.i === i ? 'selected' : ''}`} style={{ width: 56, background: 'radial-gradient(circle at 50% 50%, #1a2240, #0b1022)' }}
+                      <div key={i} class={`tile white ${q ? 'queued' : ''} ${selTile?.orbital && selTile.i === i ? 'selected' : ''}`} style={{ width: Math.min(56, tileSize + 8), background: 'radial-gradient(circle at 50% 50%, #1a2240, #0b1022)' }}
                         data-tip={def ? `${def.name}\n${def.desc}` : q ? `Queued: ${w.itemName(q)}` : 'Empty orbital slot'}
-                        onPointerDown={() => place(i, true)}>
+                        onPointerDown={(e) => { lastPointer.current = e.pointerType; if (e.pointerType === 'mouse') place(i, true); }}
+                        onClick={() => { if (lastPointer.current !== 'mouse') place(i, true); }}>
                         {o && <BuildingIcon id={o.id} size={56} />}
                         {q && q.kind === 'building' && <span class="ghost"><BuildingIcon id={q.id} size={44} /></span>}
                       </div>
@@ -213,7 +230,22 @@ export function PlanetScreen({ planetId, onClose }: { planetId: number; onClose:
                     ) : !selTile.orbital && p.tiles[selTile.i].c === 'black' ? (
                       <div class="row"><span class="grow">Dead ground.</span>{w.knows(human.id, 'terraforming') && <button class="btn sm" onClick={() => act(dispatch({ t: 'queueItem', planet: p.id, item: { kind: 'terraform', tile: selTile.i } }), 'Terraforming queued.')}>Terraform ({w.itemCost(p, { kind: 'terraform', tile: 0 })})</button>}</div>
                     ) : (
-                      <span class="dim">Empty {selTile.orbital ? 'orbital slot' : `${p.tiles[selTile.i].c} tile`}. Choose a structure from the palette to build here.</span>
+                      <div class="col" style={{ gap: 8 }}>
+                        <span class="dim">Empty {selTile.orbital ? 'orbital slot' : `${p.tiles[selTile.i].c} tile`}. Choose a structure {compact ? 'to build here:' : 'from the palette to build here.'}</span>
+                        {compact && (
+                          <div class="quickpick">
+                            {palette.filter(({ b, can }) => can && !!b.orbital === selTile.orbital).map(({ b }) => (
+                              <button key={b.id} class="pal-item" onClick={() => { act(dispatch({ t: 'queueBuilding', planet: p.id, id: b.id, tile: selTile.i, orbital: selTile.orbital })); setSelTile(null); }}
+                                data-tip={`${b.name} — ${w.buildingCost(human.id, b.id)} industry\n${b.desc}`}>
+                                <BuildingIcon id={b.id} size={36} />
+                                <span class="ellipsis" style={{ maxWidth: '100%' }}>{b.name}</span>
+                                <span class="cost tiny">{w.buildingCost(human.id, b.id)}</span>
+                              </button>
+                            ))}
+                            {!palette.some(({ b, can }) => can && !!b.orbital === selTile.orbital) && <span class="dim small">Nothing available to build here yet.</span>}
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                 )}
@@ -225,7 +257,7 @@ export function PlanetScreen({ planetId, onClose }: { planetId: number; onClose:
 
           {/* Controls */}
           {mine && (
-            <div class="col scroll" style={{ gap: 0, flex: '0 1 440px', minWidth: 320, borderLeft: '1px solid var(--line)' }}>
+            <div class="col scroll planet-controls" style={{ gap: 0, flex: '0 1 440px', minWidth: 'min(320px, 100%)', borderLeft: '1px solid var(--line)' }}>
               <Section title="Governor" right={<span class="kbd">M</span>}>
                 <div class="row" style={{ gap: 10 }}>
                   <button class={'btn ' + (p.governor.on ? 'primary' : '')} style={{ minWidth: 120 }} onClick={() => act(dispatch({ t: 'governor', planet: p.id, patch: { on: !p.governor.on } }))} data-tip="When on, the governor keeps this planet's build queue busy with the best option for its focus. You can still queue things yourself; it only acts when the queue is empty.">

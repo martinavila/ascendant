@@ -19,7 +19,11 @@ const KIND_COLOR: Partial<Record<EventKind, string>> = {
   firstContact: 'var(--accent-2)', discovery: 'var(--warn)', warning: 'var(--warn)', victory: 'var(--warn)', build: 'var(--ind)', idle: 'var(--warn)',
 };
 
-export function Outliner({ mobileOpen }: { mobileOpen: boolean }) {
+/**
+ * Planets / fleets / log. Desktop: a panel on the left. Compact screens: a
+ * slide-in drawer (`drawer`), closed after picking something.
+ */
+export function Outliner({ drawer, onClose }: { drawer?: boolean; onClose?: () => void }) {
   const st = useStore();
   const w = st.world!;
   const e = w.human()!;
@@ -28,9 +32,10 @@ export function Outliner({ mobileOpen }: { mobileOpen: boolean }) {
   const [group, setGroup] = useState(0);
   const [sort, setSort] = useState<'name' | 'pop' | 'ind' | 'res'>('pop');
 
-  if (collapsed) {
+  const done = () => { if (drawer) onClose?.(); };
+  if (collapsed && !drawer) {
     return (
-      <div class={'panel left collapsed ' + (mobileOpen ? 'mobile-open' : '')}>
+      <div class="panel left collapsed">
         <button class="btn ghost" onClick={() => setCollapsed(false)} data-tip="Show outliner"><Icon.menu /> Outliner</button>
       </div>
     );
@@ -47,13 +52,13 @@ export function Outliner({ mobileOpen }: { mobileOpen: boolean }) {
   const kinds = EVENT_GROUPS[group].kinds;
   const events = w.s.events.filter((ev) => ev.empire === e.id && (!kinds.length || kinds.includes(ev.kind))).slice(-200).reverse();
 
-  return (
-    <div class={'panel left ' + (mobileOpen ? 'mobile-open' : '')}>
+  const body = (
+    <div class={'panel left' + (drawer ? ' drawer' : '')}>
       <div class="tabs">
         <button class={tab === 'planets' ? 'on' : ''} onClick={() => setTab('planets')}>Planets {planets.length}</button>
         <button class={tab === 'fleets' ? 'on' : ''} onClick={() => setTab('fleets')}>Fleets {fleets.length}</button>
         <button class={tab === 'events' ? 'on' : ''} onClick={() => setTab('events')}>Log</button>
-        <button style={{ flex: '0 0 36px' }} onClick={() => setCollapsed(true)} data-tip="Collapse"><Icon.close size={14} /></button>
+        <button style={{ flex: '0 0 44px' }} onClick={() => (drawer ? onClose?.() : setCollapsed(true))} data-tip={drawer ? 'Close' : 'Collapse'} aria-label="Close"><Icon.close size={14} /></button>
       </div>
       {tab === 'planets' && (
         <>
@@ -69,7 +74,7 @@ export function Outliner({ mobileOpen }: { mobileOpen: boolean }) {
               const head = p.queue[0];
               const idle = !head && !p.governor.on && !p.project;
               return (
-                <div key={p.id} class={'fleet-row ' + (st.sel.planet === p.id ? 'sel' : '')} onClick={() => { store.select({ planet: p.id, star: p.star, fleet: null }); store.focus(p.star); }}>
+                <div key={p.id} class={'fleet-row ' + (st.sel.planet === p.id ? 'sel' : '')} onClick={() => { store.select({ planet: p.id, star: p.star, fleet: null }); store.focus(p.star); done(); }}>
                   <PlanetOrb planet={p} size={30} />
                   <div class="grow" style={{ minWidth: 0 }}>
                     <div class="row small" style={{ gap: 5 }}>
@@ -100,7 +105,7 @@ export function Outliner({ mobileOpen }: { mobileOpen: boolean }) {
             const first = w.s.ships[f.ships[0]];
             const dest = f.route.length ? w.s.stars[f.route[f.route.length - 1]].name : null;
             return (
-              <div key={f.id} class={'fleet-row ' + (st.sel.fleet === f.id ? 'sel' : '')} onClick={() => { store.select({ fleet: f.id, star: f.star, planet: null }); store.focus(dest && f.transit ? f.route[0] : f.star); }}>
+              <div key={f.id} class={'fleet-row ' + (st.sel.fleet === f.id ? 'sel' : '')} onClick={() => { store.select({ fleet: f.id, star: f.star, planet: null }); store.focus(dest && f.transit ? f.route[0] : f.star); done(); }}>
                 <ShipImage species={e.species} hull={first?.hull ?? 'small'} color={e.color} size={30} />
                 <div class="grow" style={{ minWidth: 0 }}>
                   <div class="row small"><b class="ellipsis grow">{f.name}</b><span class="dim">{f.ships.length}</span></div>
@@ -120,6 +125,7 @@ export function Outliner({ mobileOpen }: { mobileOpen: boolean }) {
             {!events.length && <Empty>Nothing yet.</Empty>}
             {events.map((ev) => (
               <div key={ev.id} class={'event ' + (ev.important ? 'imp' : '')} onClick={() => {
+                done();
                 if (ev.battle) store.open('battle', { battle: ev.battle });
                 else if (ev.planet !== undefined) { store.select({ planet: ev.planet, star: w.s.planets[ev.planet].star, fleet: null }); store.focus(w.s.planets[ev.planet].star); }
                 else if (ev.star !== undefined) { store.select({ star: ev.star, planet: null }); store.focus(ev.star); }
@@ -133,6 +139,12 @@ export function Outliner({ mobileOpen }: { mobileOpen: boolean }) {
           </div>
         </>
       )}
+    </div>
+  );
+  if (!drawer) return body;
+  return (
+    <div class="drawer-wrap" onPointerDown={(e) => { if (e.target === e.currentTarget) onClose?.(); }}>
+      {body}
     </div>
   );
 }

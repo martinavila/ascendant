@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/ho
 import { store, useStore, dispatch } from '../store';
 import { Bar, Modal, Section, act, fmt } from '../common';
 import { Icon } from '../icons';
+import { useMedia } from '../mobile';
 import { TECH, TECHS, unlocksOf } from '../../sim/content';
 import type { TechWithTier } from '../../sim/content/techs';
 import { techPath } from '../../sim/commands';
@@ -378,6 +379,7 @@ const ZMIN = 0.6, ZMAX = 6;
 
 function ResearchBody({ w, e }: { w: World; e: Empire }) {
   const L = useMemo(buildLayout, []);
+  const coarse = useMedia('(pointer: coarse)');
   const r = e.research;
   const rate = Math.max(1, e.last.res);
 
@@ -482,18 +484,56 @@ function ResearchBody({ w, e }: { w: World; e: Empire }) {
     return () => window.removeEventListener('keydown', k);
   }, []);
 
+  // Touch: one finger pans, two fingers pinch-zoom around their midpoint.
+  const touches = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ d: number; mx: number; my: number } | null>(null);
+  const startPinch = () => {
+    const [a, b] = [...touches.current.values()];
+    pinch.current = { d: Math.hypot(a.x - b.x, a.y - b.y), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
+  };
   const onPointerDown = (ev: PointerEvent) => {
     if (ev.pointerType === 'mouse' && ev.button !== 0) return;
     cancelAnimationFrame(anim.current);
+    touches.current.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    if (touches.current.size === 2) {
+      startPinch();
+      if (drag.current) drag.current.moved = true;
+      suppressClick.current = true;
+      setDragging(true);
+      setHover(null);
+      return;
+    }
     const v = viewRef.current;
     drag.current = { sx: ev.clientX, sy: ev.clientY, vx: v.x, vy: v.y, moved: false, pid: ev.pointerId };
   };
   const onPointerMove = (ev: PointerEvent) => {
+    if (touches.current.has(ev.pointerId)) touches.current.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    if (touches.current.size >= 2 && pinch.current) {
+      const [a, b] = [...touches.current.values()];
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      const p = pinch.current;
+      const el = svgRef.current;
+      if (el && p.d > 0) {
+        try { el.setPointerCapture(ev.pointerId); } catch { /* pointer gone */ }
+        const bx = el.getBoundingClientRect();
+        const cx = bx.left + bx.width / 2, cy = bx.top + bx.height / 2;
+        setView((v) => {
+          const s0 = fitRef.current * v.z;
+          const wx = v.x + (p.mx - cx) / s0, wy = v.y + (p.my - cy) / s0;
+          const z = clamp(v.z * (d / p.d), ZMIN, ZMAX);
+          const s1 = fitRef.current * z;
+          return { x: wx - (mx - cx) / s1, y: wy - (my - cy) / s1, z };
+        });
+      }
+      pinch.current = { d, mx, my };
+      return;
+    }
     const d = drag.current;
-    if (!d) return;
+    if (!d || d.pid !== ev.pointerId) return;
     const dx = ev.clientX - d.sx, dy = ev.clientY - d.sy;
     if (!d.moved) {
-      if (Math.hypot(dx, dy) < 5) return;
+      if (Math.hypot(dx, dy) < (ev.pointerType === 'mouse' ? 5 : 9)) return;
       d.moved = true;
       try { svgRef.current?.setPointerCapture(d.pid); } catch { /* pointer gone */ }
       setDragging(true);
@@ -502,7 +542,17 @@ function ResearchBody({ w, e }: { w: World; e: Empire }) {
     const s1 = fitRef.current * viewRef.current.z;
     setView((v) => ({ ...v, x: d.vx - dx / s1, y: d.vy - dy / s1 }));
   };
-  const endDrag = () => {
+  const endDrag = (ev?: PointerEvent) => {
+    if (ev) touches.current.delete(ev.pointerId);
+    if (touches.current.size >= 2) { startPinch(); return; }
+    pinch.current = null;
+    if (touches.current.size === 1) {
+      // One finger left after a pinch: continue panning from it without a jump.
+      const [[pid, t]] = [...touches.current.entries()];
+      const v = viewRef.current;
+      drag.current = { sx: t.x, sy: t.y, vx: v.x, vy: v.y, moved: true, pid };
+      return;
+    }
     if (drag.current?.moved) { suppressClick.current = true; setTimeout(() => { suppressClick.current = false; }, 0); }
     drag.current = null;
     setDragging(false);
@@ -790,12 +840,21 @@ function ResearchBody({ w, e }: { w: World; e: Empire }) {
           </button>
           <button class="btn icon sm ghost" disabled={!cur && !r.queue.length} onClick={() => { const id = cur ?? r.queue[0]; if (id) centerOn(id); }} data-tip="Centre on current research (C)" aria-label="Centre on current research">{Icon.target({ size: 15 })}</button>
         </div>
-        <div class="rs-hint">
-          <span><b>Click</b> research now</span>
-          <span><b>Shift/right-click</b> queue</span>
-          <span><b>Drag</b> pan</span>
-          <span><b>Wheel</b> zoom</span>
-        </div>
+        {coarse ? (
+          <div class="rs-hint">
+            <span><b>Tap</b> research now</span>
+            <span><b>Hold</b> details</span>
+            <span><b>Drag</b> pan</span>
+            <span><b>Pinch</b> zoom</span>
+          </div>
+        ) : (
+          <div class="rs-hint">
+            <span><b>Click</b> research now</span>
+            <span><b>Shift/right-click</b> queue</span>
+            <span><b>Drag</b> pan</span>
+            <span><b>Wheel</b> zoom</span>
+          </div>
+        )}
       </div>
 
       <aside class="rs-side scroll">

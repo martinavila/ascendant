@@ -3,13 +3,20 @@ import type { World } from '../sim/world';
 import type { Fleet, StarId } from '../sim/types';
 import { nebulaCanvas, starCanvas, STAR_COLORS } from '../art/procedural';
 import { fleetVisible } from '../sim/visibility';
+import { lowPower, renderPixelRatio, LONG_PRESS_MS, bottomOcclusion } from './device';
 
 // WebGL galaxy map. Scales to thousands of stars: one sprite per star, lanes in
 // a single Graphics redrawn only when ownership/exploration changes, labels
 // created lazily and culled by zoom level.
 
+export interface StarTap { button: number; double: boolean; touch?: boolean; long?: boolean; x?: number; y?: number }
+
 export interface GalaxyCallbacks {
-  onStar(star: StarId, e: { button: number; double: boolean }): void;
+  /**
+   * `touch`: the tap came from a finger/pen. `long`: a long-press (touch
+   * equivalent of right-click). `x`/`y` are client coordinates of the tap.
+   */
+  onStar(star: StarId, e: StarTap): void;
   onFleet(fleet: number): void;
   onEmpty(): void;
   onHover(star: StarId | null, x: number, y: number): void;
@@ -90,7 +97,7 @@ export class GalaxyView {
   constructor(private host: HTMLElement, private cb: GalaxyCallbacks) {}
 
   async init() {
-    await this.app.init({ resizeTo: this.host, background: '#03040a', antialias: true, resolution: Math.min(2, window.devicePixelRatio || 1), autoDensity: true, preference: 'webgl' });
+    await this.app.init({ resizeTo: this.host, background: '#03040a', antialias: !lowPower(), resolution: renderPixelRatio(), autoDensity: true, preference: 'webgl' });
     this.host.appendChild(this.app.canvas);
     this.blob = blobTexture();
     this.chevron = chevronTexture();
@@ -105,6 +112,7 @@ export class GalaxyView {
   }
 
   destroy() {
+    this.cancelLong();
     window.removeEventListener('keydown', this.onKey);
     window.removeEventListener('keyup', this.onKeyUp);
     this.app.destroy(true, { children: true, texture: false });
@@ -161,7 +169,10 @@ export class GalaxyView {
   focusOn(star: StarId, zoom?: number) {
     const st = this.w?.s.stars[star];
     if (!st) return;
-    this.anim = { x: st.x, y: st.y, z: zoom ?? Math.max(this.zoom, 0.6), t0: performance.now(), from: { x: this.cx, y: this.cy, z: this.zoom } };
+    const z = zoom ?? Math.max(this.zoom, 0.6);
+    // Keep the star in the visible part of the map when a bottom sheet covers it.
+    const dy = bottomOcclusion() / 2 / z;
+    this.anim = { x: st.x, y: st.y + dy, z, t0: performance.now(), from: { x: this.cx, y: this.cy, z: this.zoom } };
   }
 
   fitAll() {
@@ -189,8 +200,16 @@ export class GalaxyView {
 
   private pointers = new Map<number, { x: number; y: number }>();
   private dragDist = 0;
-  private pinch0 = 0;
+  private pinch: { d: number; mx: number; my: number } | null = null;
   private lastTap = { t: 0, star: -1 };
+  private touch = false;
+  private longTimer = 0;
+  private longFired = false;
+
+  private cancelLong() {
+    if (this.longTimer) clearTimeout(this.longTimer);
+    this.longTimer = 0;
+  }
 
   private bindInput() {
     const el = this.app.canvas;
@@ -207,19 +226,41 @@ export class GalaxyView {
       this.cx += before.x - after.x;
       this.cy += before.y - after.y;
     }, { passive: false });
+    const startPinch = () => {
+      const [a, b] = [...this.pointers.values()];
+      this.pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
+    };
     el.addEventListener('pointerdown', (e) => {
-      el.setPointerCapture(e.pointerId);
+      try { el.setPointerCapture(e.pointerId); } catch { /* synthetic or already-released pointer */ }
       this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      this.dragDist = 0;
-      if (this.pointers.size === 2) {
-        const [a, b] = [...this.pointers.values()];
-        this.pinch0 = Math.hypot(a.x - b.x, a.y - b.y);
+      this.touch = e.pointerType !== 'mouse';
+      this.cancelLong();
+      if (this.pointers.size === 1) {
+        this.dragDist = 0;
+        this.longFired = false;
+        if (this.touch) {
+          // Long-press on a star = touch equivalent of right-click (context actions).
+          const x = e.clientX, y = e.clientY;
+          this.longTimer = window.setTimeout(() => {
+            this.longTimer = 0;
+            if (this.pointers.size !== 1 || this.dragDist > 8) return;
+            const r = el.getBoundingClientRect();
+            const wp = this.screenToWorld(x - r.left, y - r.top);
+            const star = this.hitStar(wp.x, wp.y, true);
+            if (star === null) return;
+            this.longFired = true;
+            navigator.vibrate?.(12);
+            this.cb.onStar(star, { button: 0, double: false, touch: true, long: true, x, y });
+          }, LONG_PRESS_MS);
+        }
       }
+      if (this.pointers.size === 2) startPinch();
     });
     el.addEventListener('pointermove', (e) => {
       const r = el.getBoundingClientRect();
       const prev = this.pointers.get(e.pointerId);
       if (!prev) {
+        if (e.pointerType !== 'mouse') return;
         const wp = this.screenToWorld(e.clientX - r.left, e.clientY - r.top);
         const hit = this.hitStar(wp.x, wp.y);
         if (hit !== this.hoverStar) {
@@ -231,15 +272,27 @@ export class GalaxyView {
       const dx = e.clientX - prev.x, dy = e.clientY - prev.y;
       this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (this.pointers.size === 2) {
+        // Pinch: zoom around the midpoint and pan with it.
         const [a, b] = [...this.pointers.values()];
         const d = Math.hypot(a.x - b.x, a.y - b.y);
-        if (this.pinch0) this.zoom = this.clampZoom(this.zoom * (d / this.pinch0));
-        this.pinch0 = d;
+        const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+        if (this.pinch && this.pinch.d > 0) {
+          this.anim = null;
+          const before = this.screenToWorld(this.pinch.mx - r.left, this.pinch.my - r.top);
+          this.zoom = this.clampZoom(this.zoom * (d / this.pinch.d));
+          const after = this.screenToWorld(mx - r.left, my - r.top);
+          this.cx += before.x - after.x;
+          this.cy += before.y - after.y;
+        }
+        this.pinch = { d, mx, my };
         this.dragDist += 10;
+        this.cancelLong();
         return;
       }
+      if (this.pointers.size > 2) return;
       this.dragDist += Math.abs(dx) + Math.abs(dy);
-      if (this.dragDist > 4) {
+      if (this.dragDist > (this.touch ? 8 : 4)) {
+        this.cancelLong();
         this.anim = null;
         this.cx -= dx / this.zoom;
         this.cy -= dy / this.zoom;
@@ -249,20 +302,29 @@ export class GalaxyView {
     const up = (e: PointerEvent) => {
       const had = this.pointers.delete(e.pointerId);
       el.style.cursor = '';
-      if (!had || this.dragDist > 6 || this.pointers.size) return;
+      this.cancelLong();
+      if (this.pointers.size < 2) this.pinch = null;
+      if (this.pointers.size === 2) startPinch();
+      if (!had || this.pointers.size || this.longFired) return;
+      if (this.dragDist > (this.touch ? 10 : 6)) return;
       const r = el.getBoundingClientRect();
       const wp = this.screenToWorld(e.clientX - r.left, e.clientY - r.top);
-      const fleet = e.button === 0 ? this.hitFleet(wp.x, wp.y) : null;
+      const touch = e.pointerType !== 'mouse';
+      const fleet = e.button === 0 ? this.hitFleet(wp.x, wp.y, touch) : null;
       if (fleet !== null) return this.cb.onFleet(fleet);
-      const star = this.hitStar(wp.x, wp.y);
+      const star = this.hitStar(wp.x, wp.y, touch);
       if (star === null) return this.cb.onEmpty();
       const now = performance.now();
       const double = this.lastTap.star === star && now - this.lastTap.t < 350;
       this.lastTap = { t: now, star };
-      this.cb.onStar(star, { button: e.button, double });
+      this.cb.onStar(star, { button: e.button, double, touch, x: e.clientX, y: e.clientY });
     };
     el.addEventListener('pointerup', up);
-    el.addEventListener('pointercancel', (e) => this.pointers.delete(e.pointerId));
+    el.addEventListener('pointercancel', (e) => {
+      this.pointers.delete(e.pointerId);
+      this.cancelLong();
+      if (this.pointers.size < 2) this.pinch = null;
+    });
     el.addEventListener('pointerleave', () => { if (this.hoverStar !== null) { this.hoverStar = null; this.cb.onHover(null, 0, 0); } });
     window.addEventListener('keydown', this.onKey);
     window.addEventListener('keyup', this.onKeyUp);
@@ -280,10 +342,11 @@ export class GalaxyView {
     this.keys.delete(e.key.toLowerCase());
   };
 
-  hitStar(x: number, y: number): StarId | null {
+  hitStar(x: number, y: number, touch = false): StarId | null {
     const w = this.w;
     if (!w) return null;
-    const r = Math.max(22, 14 / this.zoom);
+    // Fingers are imprecise: accept taps within ~26 screen px of a star.
+    const r = Math.max(22, (touch ? 26 : 14) / this.zoom);
     let best: StarId | null = null, bestD = r * r;
     for (const s of w.s.stars) {
       const d = (s.x - x) ** 2 + (s.y - y) ** 2;
@@ -292,8 +355,8 @@ export class GalaxyView {
     return best;
   }
 
-  hitFleet(x: number, y: number): number | null {
-    const r = Math.max(10, 9 / this.zoom);
+  hitFleet(x: number, y: number, touch = false): number | null {
+    const r = Math.max(10, (touch ? 14 : 9) / this.zoom);
     let best: number | null = null, bestD = r * r;
     for (const [id, sp] of this.fleetSprites) {
       if (!sp.visible) continue;

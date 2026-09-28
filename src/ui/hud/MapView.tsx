@@ -3,6 +3,8 @@ import { GalaxyView, type GalaxyCallbacks } from '../../render/galaxy';
 import { store, useStore, dispatch } from '../store';
 import { act } from '../common';
 import { STAR_LABEL } from '../../art/procedural';
+import { lowPower, bottomOcclusion } from '../../render/device';
+import { Icon } from '../icons';
 
 /** What MapView needs from a galaxy renderer (2D PixiJS or 3D three.js). */
 export interface MapRenderer {
@@ -21,9 +23,15 @@ export interface MapRenderer {
 }
 
 const MAP3D_KEY = 'ascendant-map3d';
+// Phones start on the cheaper 2D map even if a 3D preference was stored on a
+// desktop; a 3D choice made on the phone lasts for the session.
+const map3dStore = () => (lowPower() ? sessionStorage : localStorage);
 const read3d = () => {
-  try { return localStorage.getItem(MAP3D_KEY) === '1'; } catch { return false; }
+  try { return map3dStore().getItem(MAP3D_KEY) === '1'; } catch { return false; }
 };
+
+/** Touch context menu for a star (tap with a fleet selected, or long-press). */
+interface StarMenu { star: number; x: number; y: number }
 
 let view: MapRenderer | null = null;
 const devExpose = (r: MapRenderer) => { if (import.meta.env.DEV) (globalThis as unknown as { __mapView: MapRenderer }).__mapView = r; };
@@ -36,12 +44,14 @@ export function MapView() {
   const st = useStore();
   const [hover, setHover] = useState<{ star: number; x: number; y: number } | null>(null);
   const [use3d, setUse3d] = useState(read3d);
+  const [menu, setMenu] = useState<StarMenu | null>(null);
 
   const toggle3d = () => {
     const next = !use3d;
-    try { localStorage.setItem(MAP3D_KEY, next ? '1' : '0'); } catch { /* storage unavailable */ }
+    try { map3dStore().setItem(MAP3D_KEY, next ? '1' : '0'); } catch { /* storage unavailable */ }
     setUse3d(next);
   };
+
 
   useEffect(() => {
     let v: MapRenderer | null = null;
@@ -55,6 +65,17 @@ export function MapView() {
           return;
         }
         const f = store.sel.fleet !== null ? w.s.fleets[store.sel.fleet] : undefined;
+        // Touch has no right-click: tapping a star with one of our fleets selected, or
+        // long-pressing any star, opens a small menu ("Move here" / "Select system").
+        if (e.touch && (e.long || (f && human && f.owner === human.id && (f.star !== star || f.transit > 0)))) {
+          if (v && f && human && f.owner === human.id) {
+            const from = f.transit > 0 && f.route.length ? f.route[0] : f.star;
+            v.routePreview = w.route(from, star, { unstable: w.fleetCanUseUnstable(f), speed: w.fleetSpeed(f) });
+          }
+          setMenu({ star, x: e.x ?? 0, y: e.y ?? 0 });
+          return;
+        }
+        setMenu(null);
         // Right-click (or tap while a fleet is selected with the move tool) moves the fleet.
         if (e.button === 2 && f && human && f.owner === human.id) {
           act(dispatch({ t: 'moveFleet', fleet: f.id, dest: star }));
@@ -65,10 +86,13 @@ export function MapView() {
         if (e.double && v) v.focusOn(star, Math.max(v.zoom, 0.9));
       },
       onFleet(fleet) {
+        setMenu(null);
         const f = store.world!.s.fleets[fleet];
         store.select({ fleet, star: f?.star ?? null, planet: null });
       },
       onEmpty() {
+        setMenu(null);
+        if (v) v.routePreview = null;
         if (store.pick) return;
         store.select({ fleet: null, star: null, planet: null });
       },
@@ -104,7 +128,7 @@ export function MapView() {
       if (cap != null) {
         const s = w.s.stars[w.s.planets[cap].star];
         r.cx = s.x;
-        r.cy = s.y;
+        r.cy = s.y + bottomOcclusion() / 2 / 0.55;
         r.zoom = 0.55;
       } else r.fitAll();
     };
@@ -187,12 +211,55 @@ export function MapView() {
     <>
       <div class="map" ref={host} key={use3d ? '3d' : '2d'} />
       {hoverInfo}
-      <button class="btn sm" onClick={toggle3d} data-tip={use3d ? 'Switch to the flat 2D map' : 'Switch to the 3D map (right-drag or Shift-drag to tilt/rotate)'}
-        style={{ position: 'absolute', top: 'calc(var(--topbar) + 18px)', right: showRight ? 'calc(var(--right) + 18px)' : 10, zIndex: 14, fontFamily: 'var(--display)', letterSpacing: '0.06em', minWidth: 44 }}>
+      {menu && w && <StarMenuView menu={menu} onClose={() => { setMenu(null); if (view) view.routePreview = null; }} />}
+      <button class={'btn sm maptoggle' + (showRight ? ' shifted' : '')} onClick={toggle3d} data-tip={use3d ? 'Switch to the flat 2D map' : 'Switch to the 3D map (right-drag or Shift-drag to tilt/rotate; on touch: twist or two-finger drag)'}>
         <span style={{ opacity: use3d ? 0.45 : 1 }}>2D</span>
         <span style={{ opacity: 0.35 }}>/</span>
         <span style={{ opacity: use3d ? 1 : 0.45 }}>3D</span>
       </button>
+    </>
+  );
+}
+
+function StarMenuView({ menu, onClose }: { menu: StarMenu; onClose: () => void }) {
+  const st = useStore();
+  const w = st.world!;
+  const human = w.human();
+  const star = w.s.stars[menu.star];
+  const f = st.sel.fleet !== null ? w.s.fleets[st.sel.fleet] : undefined;
+  const mine = !!f && !!human && f.owner === human.id;
+  let move: { days: number; jumps: number } | null = null;
+  if (mine && f) {
+    const from = f.transit > 0 && f.route.length ? f.route[0] : f.star;
+    const route = w.route(from, menu.star, { unstable: w.fleetCanUseUnstable(f), speed: w.fleetSpeed(f) });
+    if (route) {
+      const d = w.routeDays(from, route, w.fleetSpeed(f)) + (f.transit > 0 ? f.transitTotal - f.transit : 0);
+      if (isFinite(d)) move = { days: d, jumps: route.length };
+    }
+  }
+  const ex = human ? human.explored[menu.star] : 2;
+  const W = 230;
+  const left = Math.max(8, Math.min(menu.x - W / 2, window.innerWidth - W - 8));
+  const below = menu.y < window.innerHeight * 0.45;
+  const pos = below ? { top: menu.y + 22 } : { bottom: window.innerHeight - menu.y + 22 };
+  const select = () => { onClose(); store.select({ star: menu.star, fleet: null, planet: null }); };
+  return (
+    <>
+      <div class="ctx-backdrop" onPointerDown={onClose} />
+      <div class="panel ctxmenu" style={{ left, width: W, ...pos }}>
+        <div class="ctx-title"><b class="ellipsis">{star.name}</b> <span class="dim tiny">{ex === 0 ? 'unexplored' : STAR_LABEL[star.cls]}</span></div>
+        {mine && f && (
+          <button class="btn primary" disabled={!move || f.star === menu.star && f.transit === 0} onClick={() => {
+            onClose();
+            act(dispatch({ t: 'moveFleet', fleet: f.id, dest: menu.star }));
+          }}>
+            <Icon.route size={15} />
+            {f.star === menu.star && f.transit === 0 ? 'Fleet is here' : move ? <>Move here · {move.days} day{move.days === 1 ? '' : 's'}</> : 'No route'}
+          </button>
+        )}
+        <button class="btn" onClick={select}><Icon.target size={15} /> Select system</button>
+        <button class="btn ghost" onClick={() => { onClose(); galaxyView()?.focusOn(menu.star, Math.max(galaxyView()?.zoom ?? 0.6, 0.9)); }}>Center here</button>
+      </div>
     </>
   );
 }

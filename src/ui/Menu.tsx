@@ -136,8 +136,8 @@ export function NewGame({ onBack, onHost }: { onBack: () => void; /** Multiplaye
   return (
     <div class="menu-bg">
       <Backdrop />
-      <div style={{ position: 'relative', maxWidth: 1180, margin: '0 auto', padding: '28px 20px 40px' }}>
-        <div class="row" style={{ marginBottom: 16 }}>
+      <div class="menu-page" style={{ position: 'relative', maxWidth: 1180, margin: '0 auto', padding: '28px 20px 40px' }}>
+        <div class="row menu-head" style={{ marginBottom: 16 }}>
           <button class="btn ghost" onClick={onBack}>← Back</button>
           <h1 style={{ fontSize: 28 }}>{onHost ? 'Host a Multiplayer Game' : 'New Game'}</h1>
           <div class="spacer" />

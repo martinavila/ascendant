@@ -42,7 +42,7 @@ export function NetBadge() {
 function NetPanel({ net, onClose }: { net: NetSession; onClose: () => void }) {
   const w = store.world;
   return (
-    <div class="panel col" style={{ position: 'absolute', top: 40, right: 0, width: 340, maxWidth: 'calc(100vw - 24px)', zIndex: 60, padding: 0, gap: 0 }}>
+    <div class="panel col netpanel" style={{ position: 'absolute', top: 40, right: 0, width: 340, maxWidth: 'calc(100vw - 24px)', zIndex: 60, padding: 0, gap: 0 }}>
       <div class="section row" style={{ gap: 8 }}>
         <b>Room {net.room}</b>
         <span class="tiny dim">{net.transport.kind}{net.isHost ? ' · you host' : ''}</span>

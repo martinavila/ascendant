@@ -14,6 +14,7 @@ import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { createStage, starfield, type Stage } from './common';
+import { lowPower, LONG_PRESS_MS, bottomOcclusion } from '../render/device';
 import { STAR_COLORS } from '../art/procedural';
 import { fleetVisible } from '../sim/visibility';
 import type { World } from '../sim/world';
@@ -355,7 +356,8 @@ export class Galaxy3D {
       for (const b of this.batches) b.resize(w, h);
       this.starMat.uniforms.uScale.value = (h * renderer.getPixelRatio()) / (2 * TAN);
       this.starMat.uniforms.uMinPx.value = 7 * renderer.getPixelRatio();
-      this.starMat.uniforms.uMaxPx.value = Math.min(256, 170 * renderer.getPixelRatio());
+      // Big additive star glows are fill-rate heavy; keep them smaller on mobile GPUs.
+      this.starMat.uniforms.uMaxPx.value = Math.min(256, (lowPower() ? 110 : 170) * renderer.getPixelRatio());
     };
     this.stage.onResize(this.host.clientWidth || 1, this.host.clientHeight || 1);
     this.overlay = document.createElement('div');
@@ -377,6 +379,7 @@ export class Galaxy3D {
   }
 
   destroy() {
+    this.cancelLong();
     cancelAnimationFrame(this.raf);
     window.removeEventListener('keydown', this.onKey);
     window.removeEventListener('keyup', this.onKeyUp);
@@ -404,7 +407,9 @@ export class Galaxy3D {
     const st = this.w?.s.stars[star];
     if (!st) return;
     const z = zoom ?? Math.max(this.zoom, 0.6);
-    this.anim = { x: st.x, z: st.y, d: this.distFor(z), t0: performance.now(), from: { x: this.target.x, z: this.target.z, d: this.dist } };
+    // Shift the camera target "screen-down" so the star sits above a bottom sheet.
+    const off = bottomOcclusion() / 2 / z;
+    this.anim = { x: st.x + Math.sin(this.yaw) * off, z: st.y + Math.cos(this.yaw) * off, d: this.distFor(z), t0: performance.now(), from: { x: this.target.x, z: this.target.z, d: this.dist } };
   }
 
   fitAll() {
@@ -530,8 +535,16 @@ export class Galaxy3D {
   private dragButton = 0;
   private dragMode: 'pan' | 'rotate' | null = null;
   private grab: THREE.Vector3 | null = null;
-  private pinch0 = 0;
+  private pinch: { d: number; a: number; mx: number; my: number } | null = null;
   private lastTap = { t: 0, star: -1 };
+  private touch = false;
+  private longTimer = 0;
+  private longFired = false;
+
+  private cancelLong() {
+    if (this.longTimer) clearTimeout(this.longTimer);
+    this.longTimer = 0;
+  }
 
   private planeHit(clientX: number, clientY: number, out = new THREE.Vector3()): THREE.Vector3 | null {
     const r = this.stage.renderer.domElement.getBoundingClientRect();
@@ -549,21 +562,40 @@ export class Galaxy3D {
     el.style.touchAction = 'none';
     el.addEventListener('contextmenu', (e) => e.preventDefault());
     el.addEventListener('wheel', this.onWheel, { passive: false });
+    const startPinch = () => {
+      const [a, b] = [...this.pointers.values()];
+      this.pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), a: Math.atan2(b.y - a.y, b.x - a.x), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
+    };
     el.addEventListener('pointerdown', (e) => {
-      el.setPointerCapture(e.pointerId);
+      try { el.setPointerCapture(e.pointerId); } catch { /* synthetic or already-released pointer */ }
       this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      this.dragDist = 0;
-      this.dragMode = null;
-      this.dragButton = e.button;
-      this.grab = this.planeHit(e.clientX, e.clientY);
-      if (this.pointers.size === 2) {
-        const [a, b] = [...this.pointers.values()];
-        this.pinch0 = Math.hypot(a.x - b.x, a.y - b.y);
+      this.touch = e.pointerType !== 'mouse';
+      this.cancelLong();
+      if (this.pointers.size === 1) {
+        this.dragDist = 0;
+        this.dragMode = null;
+        this.dragButton = e.button;
+        this.longFired = false;
+        this.grab = this.planeHit(e.clientX, e.clientY);
+        if (this.touch) {
+          const x = e.clientX, y = e.clientY;
+          this.longTimer = window.setTimeout(() => {
+            this.longTimer = 0;
+            if (this.pointers.size !== 1 || this.dragDist > 8) return;
+            const star = this.hitStar(x, y, true);
+            if (star === null) return;
+            this.longFired = true;
+            navigator.vibrate?.(12);
+            this.cb.onStar(star, { button: 0, double: false, touch: true, long: true, x, y });
+          }, LONG_PRESS_MS);
+        }
       }
+      if (this.pointers.size === 2) startPinch();
     });
     el.addEventListener('pointermove', (e) => {
       const prev = this.pointers.get(e.pointerId);
       if (!prev) {
+        if (e.pointerType !== 'mouse') return;
         const hit = this.hitStar(e.clientX, e.clientY);
         if (hit !== this.hoverStar) {
           this.hoverStar = hit;
@@ -574,15 +606,31 @@ export class Galaxy3D {
       const dx = e.clientX - prev.x, dy = e.clientY - prev.y;
       this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (this.pointers.size === 2) {
+        // Two fingers: pinch zooms, twist rotates, moving both up/down tilts.
         const [a, b] = [...this.pointers.values()];
         const d = Math.hypot(a.x - b.x, a.y - b.y);
-        if (this.pinch0) this.zoomAt((a.x + b.x) / 2, (a.y + b.y) / 2, this.pinch0 / Math.max(1, d));
-        this.pinch0 = d;
+        const ang = Math.atan2(b.y - a.y, b.x - a.x);
+        const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+        const p = this.pinch;
+        if (p && p.d > 0) {
+          this.anim = null;
+          let da = ang - p.a;
+          if (da > Math.PI) da -= Math.PI * 2;
+          if (da < -Math.PI) da += Math.PI * 2;
+          this.yaw += da;
+          this.pitch = Math.max(0.42, Math.min(1.52, this.pitch + (my - p.my) * 0.004));
+          this.updateCamera();
+          this.zoomAt(mx, my, p.d / Math.max(1, d));
+        }
+        this.pinch = { d, a: ang, mx, my };
         this.dragDist += 10;
+        this.cancelLong();
         return;
       }
+      if (this.pointers.size > 2) return;
       this.dragDist += Math.abs(dx) + Math.abs(dy);
-      if (this.dragDist <= 4) return;
+      if (this.dragDist <= (this.touch ? 8 : 4)) return;
+      this.cancelLong();
       this.anim = null;
       if (!this.dragMode) this.dragMode = this.dragButton === 2 || this.dragButton === 1 || e.shiftKey ? 'rotate' : 'pan';
       if (this.dragMode === 'rotate') {
@@ -605,21 +653,35 @@ export class Galaxy3D {
         el.style.cursor = 'grabbing';
       }
     });
+    const release = () => {
+      this.cancelLong();
+      this.pinch = null;
+      if (this.pointers.size === 2) startPinch();
+      if (this.pointers.size === 1) {
+        // Lifting one finger of a pinch: keep panning from where the other finger is.
+        const [p] = [...this.pointers.values()];
+        this.grab = this.planeHit(p.x, p.y);
+        this.dragMode = 'pan';
+      }
+    };
     const up = (e: PointerEvent) => {
       const had = this.pointers.delete(e.pointerId);
       el.style.cursor = '';
-      if (!had || this.dragDist > 6 || this.pointers.size) return;
-      const fleet = e.button === 0 ? this.hitFleet(e.clientX, e.clientY) : null;
+      release();
+      if (!had || this.pointers.size || this.longFired) return;
+      if (this.dragDist > (this.touch ? 10 : 6)) return;
+      const touch = e.pointerType !== 'mouse';
+      const fleet = e.button === 0 ? this.hitFleet(e.clientX, e.clientY, touch) : null;
       if (fleet !== null) return this.cb.onFleet(fleet);
-      const star = this.hitStar(e.clientX, e.clientY);
+      const star = this.hitStar(e.clientX, e.clientY, touch);
       if (star === null) return this.cb.onEmpty();
       const now = performance.now();
       const double = this.lastTap.star === star && now - this.lastTap.t < 350;
       this.lastTap = { t: now, star };
-      this.cb.onStar(star, { button: e.button, double });
+      this.cb.onStar(star, { button: e.button, double, touch, x: e.clientX, y: e.clientY });
     };
     el.addEventListener('pointerup', up);
-    el.addEventListener('pointercancel', (e) => this.pointers.delete(e.pointerId));
+    el.addEventListener('pointercancel', (e) => { this.pointers.delete(e.pointerId); release(); });
     el.addEventListener('pointerleave', () => {
       if (this.hoverStar !== null && !this.pointers.size) {
         this.hoverStar = null;
@@ -666,7 +728,7 @@ export class Galaxy3D {
   private onBlur = () => this.keys.clear();
 
   /** Nearest star to the cursor in screen space (uses last frame's projection). */
-  hitStar(clientX: number, clientY: number): StarId | null {
+  hitStar(clientX: number, clientY: number, touch = false): StarId | null {
     const w = this.w;
     if (!w || !this.ready) return null;
     const r = this.stage.renderer.domElement.getBoundingClientRect();
@@ -679,18 +741,18 @@ export class Galaxy3D {
       const depth = this.screen[i * 3 + 2];
       if (depth <= 0) continue;
       const ppu = f / depth;
-      const rad = Math.max(14, 22 * ppu);
+      const rad = Math.max(touch ? 26 : 14, 22 * ppu);
       const d = (this.screen[i * 3] - x) ** 2 + (this.screen[i * 3 + 1] - y) ** 2;
       if (d < rad * rad && d < bestD) { bestD = d; best = i; }
     }
     return best;
   }
 
-  hitFleet(clientX: number, clientY: number): number | null {
+  hitFleet(clientX: number, clientY: number, touch = false): number | null {
     if (!this.ready) return null;
     const r = this.stage.renderer.domElement.getBoundingClientRect();
     const x = clientX - r.left, y = clientY - r.top;
-    let best: number | null = null, bestD = 14 * 14;
+    let best: number | null = null, bestD = (touch ? 20 : 14) ** 2;
     for (const [id, f] of this.fleets) {
       const p = this.toScreen(f.x, f.y, f.z);
       if (!p) continue;

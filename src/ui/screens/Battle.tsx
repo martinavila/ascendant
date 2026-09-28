@@ -7,6 +7,7 @@ import { shipPath, STAR_COLORS } from '../../art/procedural';
 import type { BattleReport, BattleShipSnap } from '../../sim/types';
 import type { World } from '../../sim/world';
 import type { BattleScene, BattleSceneSource } from '../../render3d/BattleScene';
+import { renderPixelRatio } from '../../render/device';
 
 // ---------------------------------------------------------------------------
 // Battle replay. The sim records one frame per round: unit positions/hp and
@@ -559,6 +560,10 @@ function BattleView({ w, report }: { w: World; report: BattleReport }) {
     return c && /^#[0-9a-f]{6}$/i.test(c) ? c : null;
   }, [report]);
   const scaleRef = useRef(1);
+  // 2D replay camera (arena coordinates): wheel / pinch to zoom, drag to pan, double-click resets.
+  const cam = useRef({ cx: ARENA_W / 2, cy: ARENA_H / 2, z: 1 });
+  const ptrs = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ d: number; mx: number; my: number } | null>(null);
   const [mode3d, setMode3d] = useState(() => {
     try { return localStorage.getItem('ascendant-battle3d') === '1'; } catch { return false; }
   });
@@ -597,7 +602,7 @@ function BattleView({ w, report }: { w: World; report: BattleReport }) {
       const pad = 12;
       const W = Math.max(100, wrap.clientWidth - pad * 2), H = Math.max(80, wrap.clientHeight - pad * 2);
       const scale = Math.min(W / ARENA_W, H / ARENA_H);
-      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      const dpr = renderPixelRatio();
       cv.style.width = Math.floor(ARENA_W * scale) + 'px';
       cv.style.height = Math.floor(ARENA_H * scale) + 'px';
       cv.width = Math.floor(ARENA_W * scale * dpr);
@@ -630,8 +635,12 @@ function BattleView({ w, report }: { w: World; report: BattleReport }) {
       }
       const ctx = !scene && cv?.offsetParent ? cv.getContext('2d') : null;
       if (cv && ctx) {
-        const s = scaleRef.current;
-        ctx.setTransform(s, 0, 0, s, 0, 0);
+        const c = cam.current;
+        const k = scaleRef.current * c.z;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.fillStyle = '#02030a';
+        ctx.fillRect(0, 0, cv.width, cv.height);
+        ctx.setTransform(k, 0, 0, k, cv.width / 2 - c.cx * k, cv.height / 2 - c.cy * k);
         draw(ctx, w, rp, Math.min(tRef.current, end), stars, sun, { hover: st.hover, highlight: st.highlight, now });
       }
       const q = Math.floor(tRef.current * 4);
@@ -667,11 +676,75 @@ function BattleView({ w, report }: { w: World; report: BattleReport }) {
     if (id !== hover) setHover(id);
   };
 
+  /** Client coordinates → arena coordinates under the current 2D camera. */
+  const toArena = (clientX: number, clientY: number) => {
+    const cv = canvasRef.current!;
+    const r = cv.getBoundingClientRect();
+    const c = cam.current, k = scaleRef.current * c.z;
+    const px = ((clientX - r.left) / r.width) * cv.width, py = ((clientY - r.top) / r.height) * cv.height;
+    return { x: (px - cv.width / 2) / k + c.cx, y: (py - cv.height / 2) / k + c.cy };
+  };
+  const clampCam = () => {
+    const c = cam.current;
+    c.z = Math.max(1, Math.min(5, c.z));
+    const hw = ARENA_W / 2 / c.z, hh = ARENA_H / 2 / c.z;
+    c.cx = Math.max(hw, Math.min(ARENA_W - hw, c.cx));
+    c.cy = Math.max(hh, Math.min(ARENA_H - hh, c.cy));
+  };
+  /** Zoom by `f` keeping the arena point under (clientX, clientY) fixed. */
+  const zoomAt = (clientX: number, clientY: number, f: number, toX = clientX, toY = clientY) => {
+    const before = toArena(clientX, clientY);
+    cam.current.z *= f;
+    clampCam();
+    const after = toArena(toX, toY);
+    cam.current.cx += before.x - after.x;
+    cam.current.cy += before.y - after.y;
+    clampCam();
+  };
+  useEffect(() => {
+    const cv = canvasRef.current;
+    if (!cv) return;
+    const wheel = (e: WheelEvent) => { e.preventDefault(); zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.0015)); };
+    cv.addEventListener('wheel', wheel, { passive: false });
+    return () => cv.removeEventListener('wheel', wheel);
+  }, [hasReplay]);
+  const onDown2d = (e: PointerEvent) => {
+    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* synthetic */ }
+    ptrs.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (ptrs.current.size === 2) {
+      const [a, b] = [...ptrs.current.values()];
+      pinch.current = { d: Math.hypot(a.x - b.x, a.y - b.y), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
+    }
+  };
+  const onUp2d = (e: PointerEvent) => {
+    ptrs.current.delete(e.pointerId);
+    pinch.current = null;
+    if (ptrs.current.size === 2) {
+      const [a, b] = [...ptrs.current.values()];
+      pinch.current = { d: Math.hypot(a.x - b.x, a.y - b.y), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
+    }
+  };
+
   const onMove = (e: PointerEvent) => {
     const cv = canvasRef.current;
     if (!cv) return;
-    const rect = cv.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * ARENA_W, y = ((e.clientY - rect.top) / rect.height) * ARENA_H;
+    const prev = ptrs.current.get(e.pointerId);
+    if (prev) {
+      ptrs.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (ptrs.current.size === 2 && pinch.current) {
+        const [a, b] = [...ptrs.current.values()];
+        const d = Math.hypot(a.x - b.x, a.y - b.y), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+        if (pinch.current.d > 0) zoomAt(pinch.current.mx, pinch.current.my, d / pinch.current.d, mx, my);
+        pinch.current = { d, mx, my };
+      } else if (ptrs.current.size === 1) {
+        const k = cam.current.z * (cv.getBoundingClientRect().width / ARENA_W);
+        cam.current.cx -= (e.clientX - prev.x) / k;
+        cam.current.cy -= (e.clientY - prev.y) / k;
+        clampCam();
+      }
+      if (e.pointerType !== 'mouse') return;
+    }
+    const { x, y } = toArena(e.clientX, e.clientY);
     let best: number | null = null, bd = 40 * 40;
     const t = Math.min(tRef.current, end);
     for (const id of rp.frames[Math.floor(t)]?.keys() ?? []) {
@@ -785,8 +858,10 @@ function BattleView({ w, report }: { w: World; report: BattleReport }) {
           {hasReplay ? (
             <>
               <div class="bt-canvas-wrap" ref={wrapRef}>
-                <canvas ref={canvasRef} onPointerMove={onMove} onPointerLeave={() => setHover(null)} style={{ cursor: hover !== null ? 'crosshair' : 'default', display: mode3d ? 'none' : 'block' }} />
-                {mode3d && <div class="bt-3d" ref={host3dRef} onPointerMove={onMove3d} onPointerLeave={() => setHover(null)} />}
+                <canvas ref={canvasRef} onPointerDown={onDown2d} onPointerUp={onUp2d} onPointerCancel={onUp2d} onPointerMove={onMove} onPointerLeave={() => setHover(null)}
+                  onDblClick={() => { cam.current = { cx: ARENA_W / 2, cy: ARENA_H / 2, z: 1 }; }}
+                  style={{ cursor: hover !== null ? 'crosshair' : 'grab', display: mode3d ? 'none' : 'block', touchAction: 'none' }} />
+                {mode3d && <div class="bt-3d" ref={host3dRef} style={{ touchAction: 'none' }} onPointerMove={onMove3d} onPointerLeave={() => setHover(null)} />}
               </div>
               <div class="bt-controls">
                 <button class="btn icon" onClick={togglePlay} data-tip={playing ? 'Pause (Space)' : 'Play (Space)'}>{playing ? <Icon.pause /> : <Icon.play />}</button>
@@ -796,7 +871,7 @@ function BattleView({ w, report }: { w: World; report: BattleReport }) {
                 </div>
                 <input type="range" min={0} max={end} step={0.01} value={t}
                   onInput={(e) => { setPlaying(false); seek(parseFloat((e.target as HTMLInputElement).value)); }} />
-                <div class="seg" data-tip="Replay view. In 3D: drag to pan, right-drag to orbit, wheel to zoom">
+                <div class="seg" data-tip="Replay view. Drag to pan, wheel or pinch to zoom (double-click resets). In 3D: right-drag or two-finger twist to orbit">
                   <button class={!mode3d ? 'on' : ''} onClick={() => setMode(false)}>2D</button>
                   <button class={mode3d ? 'on' : ''} onClick={() => setMode(true)}>3D</button>
                 </div>

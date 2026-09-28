@@ -2,6 +2,7 @@ import type { JSX } from 'preact';
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { store, useStore, dispatch } from '../store';
 import { Modal, Bar, act, fmt } from '../common';
+import { useMedia } from '../mobile';
 import { Icon, PartIcon, ShipImage } from '../icons';
 import { HULLS, HULL, PART, PARTS, TECH, SPECIES_BY_ID } from '../../sim/content';
 import { suggestDesign, inferRole } from '../../sim/commands';
@@ -160,6 +161,9 @@ function Designer({ w, human, arg }: { w: World; human: Empire; arg: DesignerArg
     return i >= 0 ? i : null;
   });
   const [cat, setCat] = useState<Category>('weapon');
+  // Phones: single-column flow; the part picker is a bottom sheet opened from a slot.
+  const phone = useMedia('(max-width: 720px)');
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [sortBy, setSortBy] = useState<'best' | 'new' | 'cost'>('best');
   const [compareId, setCompareId] = useState<number | null>(null);
   const [showObsolete, setShowObsolete] = useState(false);
@@ -367,7 +371,7 @@ function Designer({ w, human, arg }: { w: World; human: Empire; arg: DesignerArg
       height="min(880px, 100%)"
     >
       <style>{CSS}</style>
-      <div class="sd-root">
+      <div class={'sd-root' + (pickerOpen && phone ? ' picker-open' : '')}>
         {/* ---------------- left: design list ---------------- */}
         <aside class="sd-list">
           <div class="sd-list-head">
@@ -482,7 +486,7 @@ function Designer({ w, human, arg }: { w: World; human: Empire; arg: DesignerArg
               <div class="sd-slots-head">
                 <span class="caps">Slots</span>
                 <div class="spacer" />
-                <span class="faint tiny">click slot → click part · right-click clears · shift-click fills all empty</span>
+                <span class="faint tiny">{phone ? 'tap a slot to choose its part' : 'click slot → click part · right-click clears · shift-click fills all empty'}</span>
               </div>
               <div class="sd-slots">
                 {draft.parts.map((id, i) => {
@@ -494,7 +498,7 @@ function Designer({ w, human, arg }: { w: World; human: Empire; arg: DesignerArg
                       key={i}
                       class={'sd-slot' + (sel === i ? ' on' : '') + (unpowered ? ' off' : '') + (p ? '' : ' empty')}
                       style={p ? { ['--cat' as string]: CAT_COLOR[p.category] } as JSX.CSSProperties : undefined}
-                      onClick={() => { setSel(i); if (p) setCat(p.category); }}
+                      onClick={() => { setSel(i); if (p) setCat(p.category); setPickerOpen(true); }}
                       onContextMenu={(ev) => { ev.preventDefault(); if (p) clearSlot(i); }}
                       data-tip={p ? partTip(p, luminous, false) + (unpowered ? '\n\n⚠ UNPOWERED — this part does nothing. Add a generator or move it above other power users.' : '') : undefined}
                     >
@@ -560,8 +564,20 @@ function Designer({ w, human, arg }: { w: World; human: Empire; arg: DesignerArg
           </div>
         </main>
 
-        {/* ---------------- right: part picker ---------------- */}
+        {/* ---------------- right: part picker (bottom sheet on phones) ---------------- */}
+        {phone && pickerOpen && <div class="sd-picker-backdrop" onClick={() => setPickerOpen(false)} />}
         <aside class="sd-picker">
+          {phone && (
+            <div class="sd-picker-top">
+              <div class="sheet-handle static"><i /></div>
+              <div class="row" style={{ gap: 6, padding: '0 10px 6px' }}>
+                <b class="grow">{sel != null ? `Slot ${sel + 1}` : 'Choose a part'}</b>
+                <button class="btn sm" onClick={() => { const pid = sortedParts[cat][0]?.id; if (pid) { place(pid, true); setPickerOpen(false); } }} disabled={!draft.parts.some((x) => !x) || !sortedParts[cat].length} data-tip="Fill every empty slot with the top part of this list">Fill empty</button>
+                {sel != null && selPart && <button class="btn sm" onClick={() => clearSlot(sel)}>Clear slot</button>}
+                <button class="btn icon sm ghost" onClick={() => setPickerOpen(false)} aria-label="Close part picker"><Icon.close size={16} /></button>
+              </div>
+            </div>
+          )}
           <div class="sd-tabs">
             {CATEGORIES.map((c) => {
               const n = sortedParts[c.id].length;
@@ -592,7 +608,7 @@ function Designer({ w, human, arg }: { w: World; human: Empire; arg: DesignerArg
                   key={p.id}
                   class={'sd-part' + (selPart === p.id ? ' on' : '')}
                   style={{ ['--cat' as string]: CAT_COLOR[p.category] } as JSX.CSSProperties}
-                  onClick={(ev) => place(p.id, ev.shiftKey)}
+                  onClick={(ev) => { place(p.id, ev.shiftKey); if (phone) setPickerOpen(false); }}
                   data-tip={partTip(p, luminous, fresh) + '\n\nClick: place in selected slot · Shift-click: fill all empty slots'}
                 >
                   <PartIcon id={p.id} size={36} />
@@ -873,6 +889,12 @@ const CSS = `
   .sd-root { grid-template-columns: 200px minmax(0, 1fr) 290px; }
   .sd-work { grid-template-columns: 1fr; }
 }
+@media (pointer: coarse) {
+  .sd-slot-tools, .sd-drow .sd-mini { opacity: 1; }
+  .sd-slot { min-height: 50px; }
+  .sd-drow { min-height: 48px; }
+  .sd-part { min-height: 56px; }
+}
 @media (max-width: 920px) {
   .sd-root { grid-template-columns: minmax(0, 1fr) 270px; grid-template-rows: auto minmax(0, 1fr); }
   .sd-list { grid-column: 1 / -1; border-right: 0; border-bottom: 1px solid var(--line); flex-direction: row; align-items: stretch; max-height: 116px; }
@@ -881,5 +903,23 @@ const CSS = `
   .sd-list-body { display: flex; gap: 8px; overflow-x: auto; overflow-y: hidden; }
   .sd-group { display: flex; flex-direction: column; flex-wrap: wrap; min-width: 180px; margin: 0; }
   .sd-tabs { grid-template-columns: repeat(2, 1fr); }
+}
+.sd-picker-top, .sd-picker-backdrop { display: none; }
+@media (max-width: 720px) {
+  .sd-root { display: flex; flex-direction: column; overflow-y: auto; overscroll-behavior: contain; }
+  .sd-list { flex: 0 0 auto; flex-direction: column; max-height: none; }
+  .sd-list-actions { flex-direction: row; border-right: 0; border-bottom: 1px solid var(--line); padding: 8px 10px; }
+  .sd-list-body { padding: 6px 10px; }
+  .sd-main { flex: 0 0 auto; overflow: visible; padding: 10px 12px 24px; }
+  .sd-name { max-width: none; flex-basis: 100%; }
+  .sd-hulls { grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); }
+  .sd-work { grid-template-columns: minmax(0, 1fr); }
+  .sd-hero { height: 130px; }
+  .sd-picker { position: fixed; left: 0; right: 0; bottom: 0; height: min(74%, 620px); z-index: 20; border: 1px solid var(--line-2); border-bottom: 0; border-radius: 16px 16px 0 0;
+    background: var(--panel-solid); box-shadow: 0 -10px 40px rgba(0, 0, 0, .6); transform: translateY(105%); visibility: hidden; transition: transform .22s cubic-bezier(.2, .8, .2, 1), visibility 0s .22s; padding-bottom: env(safe-area-inset-bottom); }
+  .picker-open .sd-picker { transform: none; visibility: visible; transition: transform .22s cubic-bezier(.2, .8, .2, 1); }
+  .sd-picker-top { display: block; }
+  .sd-picker-backdrop { display: block; position: fixed; inset: 0; z-index: 19; background: rgba(2, 3, 8, .5); }
+  .sd-tabs { grid-template-columns: repeat(3, 1fr); padding: 6px 10px; }
 }
 `;

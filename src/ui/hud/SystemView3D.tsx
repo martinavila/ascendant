@@ -96,7 +96,7 @@ export function SystemView3D({ starId, onClose }: { starId: number; onClose: () 
         <div class="modal-head">
           <div class="col" style={{ gap: 2 }}>
             <h2>{star.name}</h2>
-            <div class="dim small">{STAR_LABEL[star.cls]} · {planets.length} planet{planets.length === 1 ? '' : 's'} · drag to pan, right-drag to rotate, wheel to zoom</div>
+            <div class="dim small">{STAR_LABEL[star.cls]} · {planets.length} planet{planets.length === 1 ? '' : 's'} · drag to pan · right-drag or two-finger twist to rotate · wheel or pinch to zoom</div>
           </div>
           <div class="spacer" />
           <div class="seg">

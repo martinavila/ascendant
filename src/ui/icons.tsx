@@ -47,6 +47,9 @@ export const Icon = {
   trophy: (p: P = {}) => svg(<><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z" /><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3" /></>, p),
   crosshair: (p: P = {}) => Icon.target(p),
   plus: (p: P = {}) => svg(<path d="M12 5v14M5 12h14" />, p),
+  more: (p: P = {}) => svg(<><circle cx="5" cy="12" r="1.6" fill="currentColor" /><circle cx="12" cy="12" r="1.6" fill="currentColor" /><circle cx="19" cy="12" r="1.6" fill="currentColor" /></>, p),
+  fit: (p: P = {}) => svg(<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" />, p),
+  list: (p: P = {}) => svg(<><path d="M9 6h11M9 12h11M9 18h11" /><circle cx="4.5" cy="6" r="1.2" fill="currentColor" /><circle cx="4.5" cy="12" r="1.2" fill="currentColor" /><circle cx="4.5" cy="18" r="1.2" fill="currentColor" /></>, p),
   route: (p: P = {}) => svg(<><circle cx="6" cy="19" r="3" /><circle cx="18" cy="5" r="3" /><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15" /></>, p),
 };
 

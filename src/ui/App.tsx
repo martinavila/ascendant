@@ -19,6 +19,7 @@ import { EncyclopediaScreen } from './screens/Encyclopedia';
 import { SettingsScreen, SavesScreen, VictoryScreen, GameMenu } from './screens/Misc';
 import { setClassicEnabled } from '../art/classic';
 import { Lobby, hostRoom } from './screens/Lobby';
+import { BottomSheet, SHORT_Q, useCompact, useMedia } from './mobile';
 
 export function App() {
   const st = useStore();
@@ -46,6 +47,10 @@ function Game() {
   const [menu, setMenu] = useState(false);
   const [mobileOutliner, setMobileOutliner] = useState(false);
   const [planetOpen, setPlanetOpen] = useState(true);
+  const compact = useCompact();
+  const short = useMedia(SHORT_Q);
+  // Portrait phones/tablets: side panels become a bottom sheet over the map.
+  const sheet = compact && !short;
 
   // Opening a planet from anywhere shows the planet screen.
   useEffect(() => { if (st.sel.planet !== null) setPlanetOpen(true); }, [st.sel.planet]);
@@ -94,21 +99,41 @@ function Game() {
   const fleet = st.sel.fleet !== null ? w.s.fleets[st.sel.fleet] : undefined;
   const showRight = !!fleet || st.sel.star !== null;
 
+  const closeSel = () => st.select({ fleet: null, star: null, planet: null });
+  const sidePanel = fleet ? <FleetPanel key={fleet.id} fleet={fleet} /> : st.sel.star !== null ? <StarPanel key={st.sel.star} starId={st.sel.star} /> : null;
+  const closeBtn = (
+    <div class="row panel-close">
+      <button class="btn icon sm ghost" onClick={closeSel} data-tip="Close (Esc)" aria-label="Close"><Icon.close size={14} /></button>
+    </div>
+  );
+
   return (
-    <div class="game">
+    <div class={'game' + (compact ? ' compact' : '') + (showRight ? ' has-right' : '')}>
       <MapView />
-      <TopBar onMenu={() => setMenu(true)} />
-      <Outliner mobileOpen={mobileOutliner} />
-      <FirstSteps />
-      <button class="btn icon" style={{ position: 'absolute', left: 8, bottom: 8, zIndex: 16, display: window.innerWidth < 860 ? 'flex' : 'none' }} onClick={() => setMobileOutliner((x) => !x)}><Icon.menu /></button>
-      {showRight && (
-        <div class="panel right">
-          <div class="row" style={{ position: 'absolute', right: 6, top: 6, zIndex: 2 }}>
-            <button class="btn icon sm ghost" onClick={() => st.select({ fleet: null, star: null, planet: null })} data-tip="Close (Esc)"><Icon.close size={14} /></button>
-          </div>
-          {fleet ? <FleetPanel key={fleet.id} fleet={fleet} /> : st.sel.star !== null ? <StarPanel key={st.sel.star} starId={st.sel.star} /> : null}
+      <TopBar onMenu={() => setMenu(true)} compact={compact} />
+      {compact ? (mobileOutliner && <Outliner drawer onClose={() => setMobileOutliner(false)} />) : <Outliner />}
+      {!compact && <FirstSteps />}
+      {compact && (
+        <div class="map-fabs">
+          <button class="btn icon fab" onClick={() => setMobileOutliner((x) => !x)} aria-label="Planets, fleets and log" data-tip="Planets, fleets and log"><Icon.list size={20} /></button>
+          <button class="btn icon fab" onClick={() => {
+            const cap = w.human()?.capital;
+            if (cap != null) { st.select({ star: w.s.planets[cap].star, planet: null, fleet: null }); st.focus(w.s.planets[cap].star); }
+          }} aria-label="Go to capital" data-tip="Go to your capital"><Icon.star size={18} /></button>
+          <button class="btn icon fab" onClick={() => galaxyView()?.fitAll()} aria-label="Show whole galaxy" data-tip="Show the whole galaxy"><Icon.fit size={18} /></button>
         </div>
       )}
+      {showRight && (sheet ? (
+        <BottomSheet onClose={closeSel}>
+          {closeBtn}
+          {sidePanel}
+        </BottomSheet>
+      ) : (
+        <div class="panel right">
+          {closeBtn}
+          {sidePanel}
+        </div>
+      ))}
       {st.sel.planet !== null && planetOpen && st.screen === 'none' && (
         <PlanetScreen planetId={st.sel.planet} onClose={() => { setPlanetOpen(false); st.select({ planet: null }); }} />
       )}

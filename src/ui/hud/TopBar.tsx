@@ -12,11 +12,12 @@ export const SPEEDS = [
   { v: 20, label: 'Fast', key: '3' },
 ];
 
-export function TopBar({ onMenu }: { onMenu: () => void }) {
+export function TopBar({ onMenu, compact }: { onMenu: () => void; compact?: boolean }) {
   const st = useStore();
   const w = st.world!;
   const e = w.human();
   const [abilityMenu, setAbilityMenu] = useState(false);
+  const [more, setMore] = useState(false);
   if (!e) return null;
   const sp = w.species(e);
   const r = e.research;
@@ -44,6 +45,90 @@ export function TopBar({ onMenu }: { onMenu: () => void }) {
     else if (t === 'planet') store.notify(`${sp.ability.name}: open a system and use the ability button next to the target planet.`);
     else if (t === 'fleet') store.notify(`${sp.ability.name}: select one of your fleets and use the ability from its panel.`);
   };
+
+  if (compact) {
+    const speedIdx = SPEEDS.findIndex((x) => x.v === st.speed);
+    const playing = st.speed > 0;
+    const pct = r.current && cost ? Math.min(100, (r.progress / cost) * 100) : 0;
+    return (
+      <>
+        <div class="panel topbar compact">
+          <button class="btn ghost icon" onClick={onMenu} aria-label="Menu" data-tip="Menu: save, load, settings"><Icon.menu /></button>
+          <div class="tb-day" data-tip={`Day ${w.s.day}`}><span class="caps">Day</span><b class="mono">{w.s.day}</b></div>
+          <button class={'btn icon ' + (playing ? 'active' : '')} onClick={() => (playing ? st.pause() : st.play(SPEEDS[1].v))} aria-label={playing ? 'Pause' : 'Play'} data-tip={playing ? 'Pause' : 'Play at normal speed'}>
+            {playing ? <Icon.pause /> : <Icon.play />}
+          </button>
+          <button class="btn icon tb-speed" onClick={() => st.play(SPEEDS[(Math.max(0, speedIdx) + 1) % SPEEDS.length].v)} aria-label="Change speed" data-tip="Tap to cycle speed: slow, normal, fast">
+            <span class="mono">{st.untilEvent && playing ? '»' : speedIdx >= 0 ? '×' + (speedIdx + 1) : '×2'}</span>
+          </button>
+          <span class="stat tb-res" data-tip="Industry per day">{Icon.ind({ size: 16 })}<b>{fmt(e.last.ind)}</b></span>
+          <span class="stat tb-res" data-tip="Research per day">{Icon.res({ size: 16 })}<b>{fmt(e.last.res)}</b></span>
+          <span class="stat tb-res tb-wide" data-tip={`Population ${e.last.pop} on ${planets} planets`}>{Icon.pop({ size: 16 })}<b>{e.last.pop}</b></span>
+          <button class={'btn ghost tb-research ' + (r.current ? '' : 'pulse')} onClick={() => st.open('research')} aria-label="Research" data-tip={r.current ? `${TECH[r.current].name} · ${eta} days` : 'Choose research!'}>
+            <span class="row" style={{ gap: 4, minWidth: 0 }}>{Icon.res({ size: 14 })}<span class="ellipsis tb-rname">{r.current ? TECH[r.current].name : <span class="warn">Research!</span>}</span>{r.current && <span class="dim mono tiny">{eta}d</span>}</span>
+            <span class="bar" style={{ height: 3 }}><i style={{ width: pct + '%', background: 'var(--res)' }} /></span>
+          </button>
+          <button class={'btn icon ' + (more ? 'active' : '')} style={{ position: 'relative' }} onClick={() => setMore((x) => !x)} aria-label="More" data-tip="Screens, speed, ability">
+            <Icon.more />
+            {(inbox > 0 || idle > 0 || ready) && <span class="tb-dot" />}
+          </button>
+        </div>
+        {more && (
+          <div class="overlay sheet-overlay" onPointerDown={(ev) => { if (ev.target === ev.currentTarget) setMore(false); }}>
+            <div class="panel more-sheet" onClick={(ev) => { if ((ev.target as Element).closest('[data-close]')) setMore(false); }}>
+              <div class="sheet-handle static"><i /></div>
+              <div class="more-stats">
+                <div class="row" style={{ gap: 8 }} data-tip={`${e.name}\n${sp.name} — ${sp.traitDesc}`}>
+                  <Portrait species={e.species} color={e.color} size={36} />
+                  <div class="col" style={{ gap: 0, minWidth: 0 }}><b class="ellipsis">{e.name}</b><span class="dim small">{sp.name}</span></div>
+                </div>
+                <div class="row wrap" style={{ gap: 14 }}>
+                  <span class="stat">{Icon.ind({ size: 16 })}<b>{fmt(e.last.ind)}</b></span>
+                  <span class="stat">{Icon.res({ size: 16 })}<b>{fmt(e.last.res)}</b></span>
+                  <span class="stat">{Icon.pro({ size: 16 })}<b>{fmt(e.last.pro)}</b></span>
+                  <span class="stat">{Icon.pop({ size: 16 })}<b>{e.last.pop}</b><span class="dim small">/{planets}</span></span>
+                  <span class="stat">{Icon.ship({ size: 16 })}<b>{ships}</b></span>
+                </div>
+              </div>
+              <div class="caps" style={{ padding: '0 14px' }}>Time</div>
+              <div class="more-row">
+                <button class={'btn ' + (st.speed === 0 ? 'active' : '')} onClick={() => st.pause()}><Icon.pause size={14} /> Pause</button>
+                <button class="btn" onClick={() => st.step(1)}><Icon.step size={14} /> +1 day</button>
+                {SPEEDS.map((x, i) => <button key={x.v} class={'btn ' + (st.speed === x.v && !st.untilEvent ? 'active' : '')} onClick={() => st.play(x.v)}>{i === 2 ? <Icon.ff size={14} /> : <Icon.play size={i === 0 ? 11 : 14} />} {x.label}</button>)}
+                <button class={'btn ' + (st.untilEvent && st.speed ? 'active' : '')} onClick={() => st.play(60, true)} data-close><Icon.skip size={14} /> Until event</button>
+              </div>
+              <div class="caps" style={{ padding: '0 14px' }}>Screens</div>
+              <div class="more-grid">
+                <button class="btn" data-close onClick={() => st.open('research')}><Icon.res size={18} /><span>Research</span></button>
+                <button class="btn" data-close onClick={() => st.open('designer')}><Icon.wrench size={18} /><span>Designer</span></button>
+                <button class="btn" data-close style={{ position: 'relative' }} onClick={() => st.open('diplomacy')}><Icon.handshake size={18} /><span>Diplomacy</span>{inbox > 0 && <span class="tb-badge">{inbox}</span>}</button>
+                <button class="btn" data-close onClick={() => st.open('empire')}><Icon.chart size={18} /><span>Empire</span></button>
+                <button class="btn" data-close onClick={() => st.open('battle')}><Icon.sword size={18} /><span>Battles</span></button>
+                <button class="btn" data-close onClick={() => st.open('encyclopedia')}><Icon.book size={18} /><span>Encyclopedia</span></button>
+              </div>
+              <div class="more-row">
+                <button class={'btn grow ' + (ready ? 'primary' : '')} disabled={!ready} data-close={sp.ability.target === 'empire' ? undefined : ''} onClick={useAb}>
+                  <Icon.bolt size={14} /> {sp.ability.name}{!ready && <span class="mono dim"> {e.abilityReadyDay - w.s.day}d</span>}
+                </button>
+                <button class="btn grow" disabled={!idle} data-close onClick={() => nextIdle()}><span class={idle ? 'warn' : ''}>{idle} idle planet{idle === 1 ? '' : 's'}</span></button>
+              </div>
+              {abilityMenu && (
+                <div class="more-row">
+                  {w.s.empires.filter((o) => o.id !== e.id && o.alive && e.relations[o.id].met).map((o) => (
+                    <button key={o.id} class="btn" data-close disabled={!!abilityCheck(w, e.id, { empire: o.id })} onClick={() => { setAbilityMenu(false); act(dispatch({ t: 'ability', target: { empire: o.id } })); }}><span class="dot" style={{ background: o.color }} /> {o.name}</button>
+                  ))}
+                </div>
+              )}
+              {st.net && <div class="more-row"><NetBadge /></div>}
+              <div class="more-row" style={{ paddingBottom: 'calc(12px + env(safe-area-inset-bottom))' }}>
+                <button class="btn ghost grow" data-close>Close</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
 
   return (
     <div class="panel topbar">

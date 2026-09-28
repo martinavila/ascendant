@@ -73,12 +73,13 @@ const CSS = `
 .dp-act select { width: 100%; }
 .dp-confirm { position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center; background: rgba(2,3,8,.65); animation: fade .12s ease-out; padding: 16px; }
 .dp-confirm .panel { width: min(460px, 100%); padding: 18px; }
+.dp-root.dp-empty { grid-template-columns: 280px 1fr; }
 @media (max-width: 1180px) {
   .dp-root { grid-template-columns: 250px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
   .dp-root > .dp-center { overflow-y: auto; }
 }
 @media (max-width: 760px) {
-  .dp-root { grid-template-columns: 1fr; overflow-y: auto; }
+  .dp-root, .dp-root.dp-empty { grid-template-columns: 1fr; grid-template-rows: none; align-content: start; overflow-y: auto; }
   .dp-root > .dp-col { border-right: 0; border-bottom: 1px solid var(--line); overflow: visible; }
   .dp-root > .dp-left .dp-list { max-height: 260px; }
   .dp-hero { flex-direction: column; align-items: flex-start; }
@@ -254,7 +255,7 @@ export function DiplomacyScreen() {
     return (
       <Modal title={<span class="row">Diplomacy{inbox.length > 0 && <span class="dp-badge">{inbox.length}</span>}</span>}>
         <style>{CSS}</style>
-        <div class="dp-root" style={{ gridTemplateColumns: '280px 1fr' }}>
+        <div class="dp-root dp-empty">
           {left}
           <div class="center" style={{ flexDirection: 'column', gap: 8, padding: 24 }}>
             <div class="dp-sil" style={{ width: 80, height: 80 }} />

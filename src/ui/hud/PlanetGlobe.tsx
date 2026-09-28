@@ -33,7 +33,7 @@ export function PlanetGlobe({ planetId, selectedTile, onTile, height = 420 }: { 
   return (
     <div style={{ position: 'relative', height, borderRadius: 10, overflow: 'hidden', border: '1px solid var(--line)' }}>
       <div ref={host} style={{ position: 'absolute', inset: 0 }} />
-      <div class="tiny dim" style={{ position: 'absolute', right: 10, top: 8, pointerEvents: 'none' }}>drag to spin · wheel to zoom</div>
+      <div class="tiny dim" style={{ position: 'absolute', right: 10, top: 8, pointerEvents: 'none' }}>drag to spin · wheel to zoom · tap a tile</div>
       {t && (
         <div class="card small" style={{ position: 'absolute', left: 10, bottom: 10, pointerEvents: 'none', maxWidth: 280 }}>
           <b style={{ textTransform: 'capitalize' }}>{t.c} tile</b>
