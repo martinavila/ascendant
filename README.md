@@ -1,5 +1,7 @@
 # Ascendant
 
+**Play:** https://ascendant-sqfvt.ondigitalocean.app — works on desktop and phones (add it to your home screen for full-screen play).
+
 A modern, browser-based 4X built on the framework of **Ascendancy** (The Logic Factory, 1995): star lanes, planets as tile grids with colored squares, a spiral tech tree, part-by-part ship design, and a galaxy of truly strange species — rebuilt to scale, and with the original's well-known problems fixed.
 
 ```bash
@@ -9,6 +11,8 @@ npm test             # simulation test suite
 npm run sim -- --stars 300 --empires 8 --days 1500   # headless AI-vs-AI game
 npm run build        # static build in dist/ (deploy anywhere)
 ```
+
+Deploys: DigitalOcean App Platform static site from `.do/app.yaml` (app `ascendant`). It builds from the public git URL, so pushes don't auto-deploy — trigger a redeploy from the DO dashboard (or ask Claude). Online multiplayer uses the Supabase project `ascendant` (Realtime only, no tables).
 
 Dev shortcut: open `http://localhost:5173/?quick` (or `?quick=SEED&stars=600`) to skip the menus.
 
