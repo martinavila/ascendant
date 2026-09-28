@@ -4,9 +4,10 @@ name: ascendant
 region: nyc
 static_sites:
   - name: web
-    git:
-      repo_clone_url: https://github.com/martinavila/ascendant.git
+    github:
+      repo: martinavila/ascendant
       branch: main
+      deploy_on_push: true
     build_command: npm ci && npm run build
     output_dir: dist
     catchall_document: index.html

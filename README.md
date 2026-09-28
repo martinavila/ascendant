@@ -12,7 +12,7 @@ npm run sim -- --stars 300 --empires 8 --days 1500   # headless AI-vs-AI game
 npm run build        # static build in dist/ (deploy anywhere)
 ```
 
-Deploys: DigitalOcean App Platform static site from `.do/app.yaml` (app `ascendant`). It builds from the public git URL, so pushes don't auto-deploy — trigger a redeploy from the DO dashboard (or ask Claude). Online multiplayer uses the Supabase project `ascendant` (Realtime only, no tables).
+Deploys: DigitalOcean App Platform static site from `.do/app.yaml` (app `ascendant`). Every push to `main` deploys automatically (DO GitHub integration). Online multiplayer uses the Supabase project `ascendant` (Realtime only, no tables).
 
 Dev shortcut: open `http://localhost:5173/?quick` (or `?quick=SEED&stars=600`) to skip the menus.
 
